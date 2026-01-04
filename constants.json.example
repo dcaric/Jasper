@@ -1,0 +1,9 @@
+{
+    "PROVIDER": "GMAIL",
+    "GMAIL_USER": "your-email@gmail.com",
+    "GMAIL_PASS": "your-app-password",
+    "OUTLOOK_USER": "your-outlook@email.com",
+    "OUTLOOK_PASS": "your-password",
+    "GEMINI_API_KEY": "your-gemini-api-key-for-web-search",
+    "USER_NAME": "your-windows-username"
+}
