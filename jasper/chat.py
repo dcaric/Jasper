@@ -2,7 +2,7 @@ import ollama
 import traceback
 from .utility.config import get_setting
 
-def chat_with_gemma(prompt):
+def chat_with_gemma(prompt, allow_fallback=True):
     """
     Sends the user prompt to gemma3:4b (or compatible model) 
     and returns the text response.
@@ -14,7 +14,14 @@ def chat_with_gemma(prompt):
         ])
         content = response['message']['content']
         
+        # Helper to strip trailing JSON-like blocks (internal logic noise)
+        import re
+        content = re.sub(r'\s*\{.*"action":\s*".*"\s*\}\s*$', '', content, flags=re.DOTALL).strip()
+
         # Check for Fallback Signal
+        if not allow_fallback:
+            return content
+
         import json
         try:
             # Look for JSON block if embedded in text

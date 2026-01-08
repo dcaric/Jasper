@@ -34,14 +34,20 @@ def get_setting(name, default=None):
     """
     # 1. Check ENV
     val = os.getenv(name)
-    if val:
+    
+    # Ignore placeholders starting with 'your-'
+    if val and not val.lower().startswith(("your-", "your_")):
         return val
     
     # 2. Check constants.json
     try:
         with open(get_config_path(), "r") as f:
             config = json.load(f)
-            return config.get(name, default)
+            # Filter constants.json values too, just in case
+            v = config.get(name, default)
+            if isinstance(v, str) and v.lower().startswith(("your-", "your_")):
+                return default
+            return v
     except:
         return default
 

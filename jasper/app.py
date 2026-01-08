@@ -3,6 +3,7 @@ import re
 import ollama
 import traceback
 import json
+import time
 from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -55,6 +56,46 @@ def summarize_text(text):
         return summary
     except:
         return text[:500] + "..."
+
+def summarize_results_with_gemma(results, original_query):
+    """
+    Summarizes a list of search results using Gemma3 4B for a professional, 
+    cohesive overview.
+    """
+    if not results:
+        return "I found no results to summarize."
+
+    # Aggregate content
+    context = ""
+    for i, item in enumerate(results):
+        source_type = "Email" if item.get("sender") else "File"
+        content = item.get("body") or item.get("content") or item.get("summary") or "No content available."
+        date = item.get("received") or item.get("date") or "Unknown date"
+        
+        context += f"ITEM {i+1} ({source_type}):\n"
+        if source_type == "Email":
+            context += f"From: {item.get('sender')}\nSubject: {item.get('subject')}\n"
+        else:
+            context += f"Name: {item.get('name')}\nPath: {item.get('path')}\n"
+        context += f"Date: {date}\n"
+        context += f"Content: {content[:1000]}\n\n"
+
+    prompt = (
+        f"The user asked: '{original_query}'.\n"
+        f"Based on the following {len(results)} search results, provide a clear, professional summary. "
+        "Group information logically and maintain chronological order if relevant. "
+        "IMPORTANT: Do not output any JSON, and do not suggest using google_search or other tools. "
+        "Just provide the text summary response.\n\n"
+        f"RESULTS:\n{context}\n"
+        "SUMMARY:"
+    )
+
+    try:
+        from . import chat
+        # Use gemma3 (Jasper) for high-quality reasoning, but disable cloud fallback
+        return chat.chat_with_gemma(prompt, allow_fallback=False)
+    except Exception as e:
+        return f"I performed the search but failed to generate a summary: {str(e)}"
 
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
@@ -128,6 +169,7 @@ async def process_query(request: Request):
             # PARSE INTENT
             intent = data.get("intent")
             params = data.get("params", {})
+            should_summarize = params.get("summarize", False)
             folder = None
             
             # DETERMINISTIC INTENT OVERRIDE (Safety Net)
@@ -533,6 +575,10 @@ async def process_query(request: Request):
                 if not results:
                     return {"type": "results", "content": "No items found.", "data": []}
                 else:
+                    if should_summarize:
+                        summary_res = summarize_results_with_gemma(results, user_input)
+                        return {"type": "chat", "content": summary_res}
+                    
                     for item in results:
                         item["summary"] = summarize_text(item.get("body", ""))
                         item["provider"] = provider
@@ -562,6 +608,9 @@ async def process_query(request: Request):
                 if not results:
                     return {"type": "results", "content": "No files found.", "data": [], "category": "files"}
                 else:
+                    if should_summarize:
+                        summary_res = summarize_results_with_gemma(results, user_input)
+                        return {"type": "chat", "content": summary_res}
                     return {"type": "results", "content": f"Found {len(results)} files.", "data": results, "category": "files"}
             else:
                 return {"type": "error", "content": str(results)}
@@ -585,6 +634,10 @@ async def process_query(request: Request):
                 if not results:
                      return {"type": "results", "content": f"No matches found for '{args.get('query')}'.", "data": [], "category": "files"}
                 
+                if should_summarize:
+                    summary_res = summarize_results_with_gemma(results, user_input)
+                    return {"type": "chat", "content": summary_res}
+
                 msg = f"Found {len(results)} relevant semantic matches in your files."
                 return {"type": "results", "content": msg, "data": results, "category": "files"}
             else:

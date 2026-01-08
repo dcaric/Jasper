@@ -6,12 +6,21 @@ SYSTEM """
 Extract JSON. Use intents: 'mail', 'files', 'semantic', 'chat'.
 
 INTENTS:
-- 'mail': Search emails (sender, subject, date_filter, provider, has_attachment).
-- 'files': Search files (query, date_filter).
-- 'semantic': Ask questions or search content (query, folder).
+- 'mail': Search emails (sender, subject, date_filter, provider, has_attachment, summarize).
+- 'files': Search files (query, date_filter, summarize).
+- 'semantic': Ask questions or search content (query, folder, summarize).
 - 'chat': Greetings and general talk (short message).
 
 EXAMPLES:
+Input: search gmail for subject 'ljeto zavala' last 40 days and summarize
+{"intent": "mail", "params": {"provider": "GMAIL", "subject": "ljeto zavala", "date_filter": "last 40 days", "summarize": true}}
+
+Input: summarize gmail from sonja last 3 days
+{"intent": "mail", "params": {"sender": "sonja", "provider": "GMAIL", "date_filter": "last 3 days", "summarize": true}}
+
+Input: find and summarize files about 'budget'
+{"intent": "files", "params": {"query": "budget", "summarize": true}}
+
 Input: search gmail for subject 'ljeto zavala' last 40 days
 {"intent": "mail", "params": {"provider": "GMAIL", "subject": "ljeto zavala", "date_filter": "last 40 days"}}
 
@@ -27,48 +36,18 @@ Input: find mail from zvone
 Input: find emails about Hvar
 {"intent": "mail", "params": {"body": "Hvar", "provider": "OUTLOOK"}}
 
-Input: find emails mentioning "contract"
-{"intent": "mail", "params": {"body": "contract", "provider": "OUTLOOK"}}
-
 Input: find file ModelfileMeveric
 {"intent": "files", "params": {"query": "ModelfileMeveric"}}
 
-Input: find file report.docx
-{"intent": "files", "params": {"query": "report.docx"}}
-
-Input: find "Maverick" in the logs folder
-{"intent": "semantic", "params": {"query": "Maverick", "folder": "logs"}}
+Input: find "Maverick" in the logs folder and summarize
+{"intent": "semantic", "params": {"query": "Maverick", "folder": "logs", "summarize": true}}
 
 Input: what is AI in the Jasper folder?
 {"intent": "semantic", "params": {"query": "what is AI", "folder": "Jasper"}}
-
-Input: what is AI?
-{"intent": "semantic", "params": {"query": "what is AI"}}
-
-Input: what is AI?
-{"intent": "semantic", "params": {"query": "what is AI"}}
-
-Input: what is the weather in Split?
-{"intent": "chat", "params": {"message": "what is the weather in Split?"}}
-
-Input: check the web for news
-{"intent": "chat", "params": {"message": "check the web for news"}}
-
-Input: how is the stock market doing?
-{"intent": "chat", "params": {"message": "how is the stock market doing?"}}
-
-Input: what is the price of NVDA?
-{"intent": "chat", "params": {"message": "what is the price of NVDA?"}}
 
 Input: hi
 {"intent": "chat", "params": {"message": "hi"}}
 
 Input: search for content "project plan"
 {"intent": "semantic", "params": {"query": "project plan"}}
-
-Input: find file containing "API key"
-{"intent": "semantic", "params": {"query": "API key"}}
-
-Input: search inside files for "error log"
-{"intent": "semantic", "params": {"query": "error log"}}
 """
