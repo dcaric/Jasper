@@ -11,22 +11,34 @@ Unlike native search tools that may fail to index deep file content, Jasper uses
 
 ## Features
 - **Unified Search**: Consolidate searches across Gmail, Outlook, Local Files, and the Web via a standardized plugin interface.
-- **AI Architecture**: Powered by a multi-model stack (FunctionGemma, Gemma3, and Gemini).
+- **AI Architecture**: Powered by a multi-model stack (FunctionGemma, Gemma3, and Gemini) with a "Hybrid Core" philosophy.
 - **Semantic Content Search**: Search *inside* files (HTML, JS, CSS, TXT) using AI-powered meaning matching (ChromaDB).
+- **Deep File Discovery**: Robust 2-level recursive search fallback for nested project directories.
+- **PDF Intelligence**: Integrated `pypdf` text extraction for professional document summarization.
 - **Privacy First**: Local files are processed locally; Cloud models are only used for real-time web data.
 - **Index Lifecycle**: Formalized CLI for building, refreshing, and pruning your knowledge index.
-- **Professional Architecture**: Refactored into a modular Python package for easier maintenance.
+- **Modern Architecture**: Streamlined Web-first design (legacy CLI components removed for V1.1).
 - **Deep Linking**: Open emails or files directly with one click.
-- **Background Service**: Runs silently in the background and starts automatically with Windows.
 
 For a detailed history of changes, see the [Changelog](./CHANGELOG.md).
 
-## AI Architecture
-Jasper is built on a specialized 4-tier engine:
-1. **FunctionGemma (300MB)**: Our "Intent Controller." It runs locally to detect your commands and route them to the right tool.
-2. **Gemma3 4B**: Our "Summarization Specialist." It handles deep-dives into your documents and email threads.
-3. **Gemini (with Search)**: Our "Web Bridge." Used exclusively for real-time data like weather, stocks, and news.
-4. **ChromaDB**: Our "Memory." A vector database that chunks and stores your local files for semantic search.
+## AI Architecture (Hybrid Core)
+Jasper follows a "Dual-Track" architectural philosophy:
+
+### 1. The Personal Core (Custom Scripts)
+For highly sensitive or performance-critical data (Local Files, Mail), Jasper uses **Lean Custom Scripts**. This ensures maximum speed, local execution, and zero protocol overhead when searching your filesystem or inbox.
+
+### 2. The Multi-Model Engine
+1. **FunctionGemma (300MB)**: Our "Intent Controller" running locally to route commands.
+2. **Gemma3 4B**: Our "Summarization Specialist" for deep document analysis.
+3. **Gemini 2.0**: Our "Web Bridge" for real-time data (Weather, Stocks, News).
+4. **ChromaDB**: Our "Semantic Memory" for content-based matching.
+
+## Future Roadmap: External Ecosystem (MCP)
+To enable Jasper to grow into a massive ecosystem, we are adopting the **Model Context Protocol (MCP)** for the "Integration Layer."
+
+- **Modular Plugins**: Future support for Slack, Jira, GitHub, and Kita will be implemented as **MCP Servers**. This allows Jasper to "plug and play" with any external community tool without bloating the core code.
+- **Cloud AI Integration**: MCP will act as the bridge between Jasper's local knowledge and advanced cloud agents.
 
 ## Installation & Setup
 For a complete step-by-step setup on a new machine, please see [SETUP.md](./SETUP.md).
