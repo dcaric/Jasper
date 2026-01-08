@@ -12,34 +12,37 @@ def chat_with_gemma(prompt, allow_fallback=True):
         response = ollama.chat(model='gemma3', messages=[
             {'role': 'user', 'content': prompt},
         ])
-        content = response['message']['content']
+        raw_content = response['message']['content']
         
-        # Helper to strip trailing JSON-like blocks (internal logic noise)
-        import re
-        content = re.sub(r'\s*\{.*"action":\s*".*"\s*\}\s*$', '', content, flags=re.DOTALL).strip()
-
-        # Check for Fallback Signal
-        if not allow_fallback:
-            return content
-
-        import json
-        try:
-            # Look for JSON block if embedded in text
+        # Check for Fallback Signal FIRST (on raw content)
+        if allow_fallback:
+            import json
             import re
-            json_match = re.search(r'\{.*"action":\s*"google_search".*\}', content, re.DOTALL)
-            if json_match:
-                 data = json.loads(json_match.group(0))
-            else:
-                 data = json.loads(content)
+            try:
+                # 1. Try to find JSON block in the raw content
+                json_match = re.search(r'\{.*"action":\s*"google_search".*\}', raw_content, re.DOTALL)
+                
+                # 2. Extract and parse data if found
+                data = None
+                if json_match:
+                    data = json.loads(json_match.group(0))
+                elif raw_content.strip().startswith("{") and raw_content.strip().endswith("}"):
+                    # Maybe it's ONLY JSON
+                    data = json.loads(raw_content)
 
-            if isinstance(data, dict) and data.get("action") == "google_search":
-                query = data.get("query")
-                print(f"DEBUG: Cloud Fallback Triggered -> Query: {query}")
-                return call_gemini_cloud(query)
-        except:
-            pass # Not JSON, just normal chat
+                if isinstance(data, dict) and data.get("action") == "google_search":
+                    query = data.get("query")
+                    print(f"DEBUG: Cloud Fallback Triggered -> Query: {query}")
+                    return call_gemini_cloud(query)
+            except Exception as e:
+                print(f"DEBUG: JSON parse failed (likely just normal text): {e}")
+
+        # If no fallback or not allowed, CLEAN the content and return it
+        import re
+        # Strip trailing JSON-like blocks (internal logic noise)
+        clean_content = re.sub(r'\s*\{.*"action":\s*".*"\s*\}\s*$', '', raw_content, flags=re.DOTALL).strip()
             
-        return content
+        return clean_content
     except Exception as e:
         print(f"Chat Error: {e}")
         traceback.print_exc()
