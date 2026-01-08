@@ -2,6 +2,9 @@
 
 Jasper is a high-performance AI agent that helps you search and summarize your emails using the `FunctionGemma:270M` model.
 
+![Jasper Workspace](images/j1.png)
+![Jasper Search Results](images/j2.png)
+
 ## Features
 - **WhatsApp-style Web UI**: Modern, responsive, and legible design.
 - **Multi-Provider Support**: Works with **Gmail (IMAP)** and **Outlook Classic (COM)**.
@@ -62,7 +65,11 @@ This is the most important part for the future. Native search is a Dead End: you
 
 Native Search: "Find the invoice." -> You find it.
 Jasper: "Find the last invoice from Dario and tell me the total amount." Because the search results are in Python code, we can pipe that file content directly into a summarizer or an action (like drafting a reply email).
+![Semantic Matching](images/j3.png)
+
 5. Semantic Search (The Next Step)
 By having this infrastructure, we are 90% of the way to True Semantic Search. Once we add a Vector DB (ChromaDB/FAISS), you'll be able to search for "budget stuff" and it will find a spreadsheet named 2024_projections.xlsx because it understands the meaning of the content, not just the filename.
+
+![Jasper Benefits](images/j4.png)
 
 In short: Outlook and File Explorer are "Search Tools." Jasper is a "Knowledge Hub" that connects the dots between your different worlds.
