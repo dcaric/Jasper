@@ -2,6 +2,7 @@ import sys
 import os
 import shutil
 import subprocess
+import hashlib
 from pathlib import Path
 
 # Base directory of the project
@@ -23,15 +24,35 @@ def ensure_venv():
     If not running in venv, it restarts itself with the venv python.
     """
     if is_venv():
-        return # Already in venv
+        # Quick health check: is pip available?
+        try:
+            import pip
+            return # Already in healthy venv
+        except ImportError:
+            print("[BOOTSTRAP] Warning: Running in a virtual environment where 'pip' is missing.")
+            print("[BOOTSTRAP] This environment is likely corrupted.")
+            print("[TIP] To fix: Close this terminal, delete the 'venv' folder manually, and run 'python run.py' again.")
+            sys.exit(1)
 
-    print("[BOOTSTRAP] Environment check: Not in a virtual environment.")
+    print("[BOOTSTRAP] Environment check: Using virtual environment...")
     
-    # 1. Create venv if missing
-    if not VENV_DIR.exists():
-        print(f"[BOOTSTRAP] Creating virtual environment in {VENV_DIR}...")
-        subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
-        print("[BOOTSTRAP] Venv created.")
+    # 1. Create venv if missing or broken
+    is_broken = VENV_DIR.exists() and not (VENV_DIR / "pyvenv.cfg").exists()
+    
+    if not VENV_DIR.exists() or is_broken:
+        if is_broken:
+            print("[BOOTSTRAP] Virtual environment directory exists but is corrupted (missing pyvenv.cfg).")
+            print("[BOOTSTRAP] Attempting to repair/recreate...")
+        else:
+            print(f"[BOOTSTRAP] Creating virtual environment in {VENV_DIR}...")
+            
+        try:
+            subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+            print("[BOOTSTRAP] Venv created/repaired.")
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] Failed to create virtual environment: {e}")
+            print("[TIP] Try deleting the 'venv' folder manually and running the script again.")
+            sys.exit(1)
 
     # 2. Identify venv python
     if os.name == 'nt':
@@ -45,30 +66,54 @@ def ensure_venv():
 
     # 3. Check/Install dependencies
     requirements = BASE_DIR / "requirements.txt"
+    hash_file = VENV_DIR / ".requirements_hash"
+    
     if requirements.exists():
-        print("[BOOTSTRAP] Verifying dependencies (pip install)...")
-        # We run pip install to ensure everything is there. 
-        # Pip is smart enough to skip if already satisfied.
-        subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements)], check=True)
+        # 3b. Calculate current hash
+        with open(requirements, "rb") as f:
+            current_hash = hashlib.md5(f.read()).hexdigest()
+        
+        # Check against stored hash
+        stored_hash = ""
+        if hash_file.exists():
+            stored_hash = hash_file.read_text().strip()
+            
+        if current_hash != stored_hash:
+            print("[BOOTSTRAP] Dependencies changed or not verified. Running pip install...")
+            try:
+                subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements)], check=True)
+                # Store the new hash only if pip succeeded
+                hash_file.write_text(current_hash)
+                print("[BOOTSTRAP] Dependencies updated and verified.")
+            except subprocess.CalledProcessError as e:
+                print(f"[ERROR] Pip install failed: {e}")
+                sys.exit(1)
+        else:
+            print("[BOOTSTRAP] Dependencies verified (cached).")
 
     # 4. Re-execute the script using the venv python
-    print("[BOOTSTRAP] Restarting within virtual environment...\n")
+    print(f"[BOOTSTRAP] Switching to virtual environment python: {venv_python}")
     os.execv(str(venv_python), [str(venv_python)] + sys.argv)
 
 def bootstrap():
     print("--- Jasper Smart Bootstrap ---")
     
     # 1. Ensure .env exists
+    print("[BOOTSTRAP] Step 1: Checking environment configuration (.env)...")
     env_file = BASE_DIR / ".env"
     if not env_file.exists():
         example_env = BASE_DIR / ".env.example"
         if example_env.exists():
             print("[BOOTSTRAP] .env missing. Creating from .env.example...")
             shutil.copy(example_env, env_file)
+            print("[BOOTSTRAP] .env created.")
         else:
             print("[WARNING] .env.example not found. Please create .env manually.")
+    else:
+        print("[BOOTSTRAP] .env file verified.")
 
     # 2. Check Ollama Models
+    print("[BOOTSTRAP] Step 2: Verifying Ollama models...")
     required_models = ["functiongemma", "gemma3:4b"]
     try:
         # Check if ollama is available
@@ -89,16 +134,20 @@ def bootstrap():
         print("Please ensure Ollama is installed and running.")
 
     # 3. Ensure Semantic Index exists
+    print("[BOOTSTRAP] Step 3: Verifying semantic index (ChromaDB)...")
     db_path = BASE_DIR / "chroma_db"
     if not db_path.exists():
-        print("[BOOTSTRAP] Semantic Index not found. Building initial index...")
+        print("[BOOTSTRAP] Semantic Index not found. Building initial index (this may take a minute)...")
         try:
             from jasper.utility.indexer import main as run_indexer
             # Pass build command to the indexer's main
             sys.argv = ["indexer.py", "build"]
             run_indexer()
+            print("[BOOTSTRAP] Initial index build complete.")
         except Exception as e:
             print(f"[ERROR] Failed to build initial index: {e}")
+    else:
+        print("[BOOTSTRAP] Semantic index verified.")
 
     print("--- Bootstrap Complete ---\n")
 

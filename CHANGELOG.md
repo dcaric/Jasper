@@ -19,6 +19,8 @@ All notable changes to the Jasper project will be documented in this file.
 - **Windows Integration**: Updated `setup_automation.bat` to work with the new package structure.
 
 ### Fixed
+- **Startup Corruption**: Fixed `SyntaxError` in `jasper/__init__.py` caused by null bytes/incorrect encoding.
+- **Missing Imports**: Resolved `NameError` in `jasper/app.py` and `jasper/filemanager/file_tools.py` by adding missing `os`, `win32com.client`, and `datetime` imports.
 - **Gmail Date Filtering**: Fixed logic where exact single-day searches returned no results due to exclusive boundaries.
 - **Frontend Crashes**: Resolved JavaScript errors caused by missing metadata in file search results.
 - **Import Loops**: Fixed circular dependency issues during model initialization.

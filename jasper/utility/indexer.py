@@ -174,16 +174,6 @@ def index_all(force=False):
             if file.endswith(('.txt', '.md', '.py', '.bat', '.html', '.js', '.css', '.json')) or file == 'Modelfile':
                 all_files.append(os.path.join(root, file))
 
-    working_dir = r"C:\Users\Dario\WORKING"
-    if os.path.exists(working_dir) and working_dir not in workspace:
-        for root, dirs, files in os.walk(working_dir):
-            dirs[:] = [d for d in dirs if d not in skip_folders and not d.startswith('.')]
-            for file in files:
-                f_path = os.path.join(root, file)
-                if f_path.endswith(('.txt', '.md', '.py', '.bat', '.html', '.js', '.css', '.json')) or Path(f_path).name == 'Modelfile':
-                    if f_path not in all_files:
-                        all_files.append(f_path)
-
     total = len(all_files)
     print(f"Found {total} files to index")
     
