@@ -45,6 +45,14 @@ To enable Jasper to grow into a massive ecosystem, we are adopting the **Model C
 
 ![Jasper MCP Roadmap](images/j5.jpg)
 
+### The Agentic Future: Beyond Search
+Development is progressing in carefully planned, incremental steps. Our ultimate goal is to evolve Jasper from a "Knowledge Hub" into a **Local AI Agent**. 
+
+Future releases will introduce **Agentic Features** where Jasper will have the capability to:
+- **Supervise Complex Workflows**: Monitor multiple task statuses across different platforms.
+- **Autonomous Decision Making**: Make logical choices based on the context of your data to resolve blockers.
+- **Task Orchestration**: Proactively initiate new tasks (e.g., drafted replies, calendar scheduling, or file generation) based on its findings.
+
 ## Installation & Setup
 For a complete step-by-step setup on a new machine, please see [SETUP.md](./SETUP.md).
 
