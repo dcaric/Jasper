@@ -6,11 +6,19 @@ from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from mail.email_tools import find_emails as find_emails_gmail
-from mail.outlook_tools import find_emails as find_emails_outlook
-from filemanager.file_tools import find_files, open_file
-from utility.semantic_tools import search_semantic
-import os
+from .utility.config import get_setting, get_log_file, get_status_file
+from .mail.gmail_connector import GmailConnector
+from .mail.outlook_connector import OutlookConnector
+from .filemanager.file_connector import FileConnector
+from .utility.semantic_connector import SemanticConnector
+
+# Connector Registry
+connectors = {
+    "mail_gmail": GmailConnector(),
+    "mail_outlook": OutlookConnector(),
+    "files": FileConnector(),
+    "semantic": SemanticConnector()
+}
 
 app = FastAPI()
 
@@ -23,12 +31,7 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 MODEL_NAME = "functiongemma"
 
 def get_provider():
-    try:
-        with open("constants.json", "r") as f:
-            config = json.load(f)
-            return config.get("PROVIDER", "GMAIL").upper()
-    except:
-        return "GMAIL"
+    return get_setting("PROVIDER", "GMAIL").upper()
 
 def summarize_text(text):
     if not text or len(text.strip()) < 10:
@@ -67,7 +70,7 @@ async def process_query(request: Request):
 
     try:
         # LOGGING
-        with open("debug.log", "a") as f:
+        with open(get_log_file(), "a") as f:
             f.write(f"[{datetime.now()}] Input: {user_input}\n")
         
         # OLLAMA CALL (Using Jasper - built-in system prompt)
@@ -88,7 +91,7 @@ async def process_query(request: Request):
             print(f"[{datetime.now()}] AI Timeout for input: {user_input}")
             raw_content = "" # Will trigger fallback
             
-        with open("debug.log", "a") as f:
+        with open(get_log_file(), "a") as f:
             f.write(f"[{datetime.now()}] AI Response: {raw_content}\n")
         print(f"Jasper Logic -> {raw_content}")
 
@@ -103,7 +106,7 @@ async def process_query(request: Request):
             # FALLBACK HELPER
             async def fallback_to_chat():
                  print(f"[{datetime.now()}] DEBUG: Fallback to Gemma3 triggered.")
-                 import chat
+                 from . import chat
                  # Run in executor to avoid blocking
                  loop = asyncio.get_event_loop()
                  resp = await loop.run_in_executor(None, lambda: chat.chat_with_gemma(user_input))
@@ -380,7 +383,7 @@ async def process_query(request: Request):
                      print(f"DEBUG: Extracted date filter via regex: {date_filter}")
                 
             # DATE PARSING
-            from utility.date_utils import extract_date_range, clean_date_string
+            from .utility.date_utils import extract_date_range, clean_date_string
             date_from, date_to = extract_date_range(date_filter or user_input)
                 
             if date_from or date_to:
@@ -503,76 +506,57 @@ async def process_query(request: Request):
             # For now, we trust the model's extraction of 'body' vs 'subject'.
             
             # LOGGING PARAMETERS
-            with open("debug.log", "a") as f:
+            with open(get_log_file(), "a") as f:
                 f.write(f"[{datetime.now()}] Final Params: provider={final_provider}, sender={sender}, subject={subject}, body={body_text}, date_filter={date_filter}, has_attachment={has_attachment}, from={date_from}, to={date_to}\n")
                 
             print(f"DEBUG: Executing find_items(provider='{final_provider}', sender='{sender}', subject='{subject}', body='{body_text}', limit={limit}, from='{date_from}', to='{date_to}')")
                 
-            if final_provider == "OUTLOOK":
-                print("DEBUG: Using Provider -> OUTLOOK")
-                
-                # HYBRID APPROACH: Check if we have IMAP credentials (OUTLOOK_PASS)
-                # If yes, use IMAP (New Outlook compatible).
-                # If no, fall back to COM (Classic Outlook compatible).
-                use_imap = False
-                try:
-                    with open("constants.json", "r") as f:
-                        cfg = json.load(f)
-                        if cfg.get("OUTLOOK_PASS") or cfg.get("OUTLOOK_PASSWORD"):
-                           use_imap = True
-                except: pass
-                
-                if use_imap:
-                    print("DEBUG: OUTLOOK_PASS found. Using IMAP for Outlook.")
-                    results = find_emails_gmail(sender_name=sender, subject_text=subject, limit=limit, date_from=date_from, date_to=date_to, provider="OUTLOOK")
-                else:
-                     print("DEBUG: NO OUTLOOK_PASS found. Using COM for Classic Outlook.")
-                     results = find_emails_outlook(sender_name=sender, subject_text=subject, body_text=body_text, limit=limit, date_from=date_from, date_to=date_to, has_attachment=has_attachment)
-            else:
-                print("DEBUG: Using Provider -> GMAIL")
-                results = find_emails_gmail(sender_name=sender, subject_text=subject, limit=limit, date_from=date_from, date_to=date_to, provider="GMAIL")
-                
+        # ROUTE TO CONNECTOR
+        if function_name == "fetch_items":
+            provider = final_provider or get_provider()
+            connector_key = f"mail_{provider.lower()}"
+            connector = connectors.get(connector_key, connectors["mail_gmail"])
+            
+            # Use clarified params
+            results = connector.search(
+                sender=sender, 
+                subject=subject, 
+                body=body_text, 
+                limit=limit, 
+                date_from=date_from, 
+                date_to=date_to,
+                has_attachment=has_attachment
+            )
+            
             if isinstance(results, list):
                 if not results:
                     return {"type": "results", "content": "No items found.", "data": []}
                 else:
-                    # Add summaries and provider info to each email
                     for item in results:
-                        # snippet key might be 'body' or 'body_preview' - unified to 'body' in outlook_tools.py
                         item["summary"] = summarize_text(item.get("body", ""))
-                        item["provider"] = final_provider
-                            
+                        item["provider"] = provider
                     return {"type": "results", "content": f"Found {len(results)} items.", "data": results}
             else:
                 return {"type": "error", "content": str(results)}
+
         elif function_name == "search_files":
+            # Clean up query
             query = args.get("query") or args.get("name")
             if query:
-                query = query.strip()
-                # Strip common prefix words
-                prefixes = [
-                    r'^search\s+for\s+', r'^find\s+files?\s+about\s+', r'^find\s+files?\s+',
-                    r'^find\s+folders?\s+', r'^search\s+files?\s+for\s+', r'^search\s+',
-                    r'^get\s+', r'^folder\s+', r'^file\s+'
-                ]
-                for pref in prefixes:
-                    query = re.sub(pref, '', query, flags=re.IGNORECASE)
-                    
-                query = query.strip()
-                
-            limit = args.get("limit", 10)
-            date_filter = args.get("date_filter")
-                
-            # DATE PARSING
-            from utility.date_utils import extract_date_range
-            date_from, date_to = extract_date_range(date_filter or user_input)
-                
-            with open("debug.log", "a") as f:
-                f.write(f"[{datetime.now()}] File Params: query={query}, date_from={date_from}, date_to={date_to}\n")
-                
-            print(f"DEBUG: Executing find_files(query='{query}', limit={limit}, from='{date_from}', to='{date_to}', kind='{args.get('kind')}')")
-            results = find_files(query=query, date_from=date_from, date_to=date_to, limit=limit, kind=args.get("kind"))
-                
+                for pref in [r'^search\s+for\s+', r'^find\s+files?\s+about\s+', r'^find\s+files?\s+', r'^find\s+folders?\s+', r'^search\s+files?\s+for\s+', r'^search\s+', r'^get\s+', r'^folder\s+', r'^file\s+']:
+                    query = re.sub(pref, '', query, flags=re.IGNORECASE).strip()
+            
+            from .utility.date_utils import extract_date_range
+            date_from, date_to = extract_date_range(args.get("date_filter") or user_input)
+            
+            results = connectors["files"].search(
+                query=query, 
+                limit=args.get("limit", 10), 
+                kind=args.get("kind"), 
+                date_from=date_from, 
+                date_to=date_to
+            )
+            
             if isinstance(results, list):
                 if not results:
                     return {"type": "results", "content": "No files found.", "data": [], "category": "files"}
@@ -582,69 +566,39 @@ async def process_query(request: Request):
                 return {"type": "error", "content": str(results)}
 
         elif function_name == "semantic_search":
-            query = args.get("query")
-            limit = args.get("limit", 10)
+            # Robust folder extraction
             folder = args.get("folder")
-            
-            # Robust extraction fallback: search for "in the [X] folder" or "folder [X]"
-            # ALWAYS run this to verify AI didn't hallucinate (like 'logs')
-            regex_folder = None
-            folder_match = re.search(r"(?:in the|folder)\s+['\"]?(\w+)['\"]?\s+folder", user_input, re.IGNORECASE)
+            folder_match = re.search(r"(?:in the|folder)\s+['\"]?(\w+)['\"]?\s+folder", user_input, re.IGNORECASE) or re.search(r"folder\s+['\"]?(\w+)['\"]?", user_input, re.IGNORECASE)
             if folder_match:
-                regex_folder = folder_match.group(1).strip()
-            else:
-                # try "folder [X]"
-                folder_match = re.search(r"folder\s+['\"]?(\w+)['\"]?", user_input, re.IGNORECASE)
-                if folder_match:
-                     f_test = folder_match.group(1).strip()
-                     if f_test.lower() not in ["the", "my"]:
-                         regex_folder = f_test
+                f_test = folder_match.group(1).strip()
+                if f_test.lower() not in ["the", "my"]:
+                    folder = f_test
 
-            # If regex found a folder, trust it more than AI (preventing "logs" hallucinations)
-            if regex_folder:
-                if folder and folder.lower() != regex_folder.lower():
-                    print(f"DEBUG: Overriding AI Folder '{folder}' -> '{regex_folder}' (Regex Match)")
-                folder = regex_folder
-
-            print(f"DEBUG: Final Folder for Search -> {folder}")
-
-            with open("debug.log", "a") as f:
-                f.write(f"[{datetime.now()}] Semantic Search: query='{query}', folder='{folder}'\n")
-
-            print(f"DEBUG: Executing semantic_search(query='{query}', limit={limit}, folder={folder})")
+            results = connectors["semantic"].search(
+                query=args.get("query"), 
+                limit=args.get("limit", 10), 
+                folder=folder
+            )
             
-            # CHROMA DB INTEGRATION: Perform semantic vector search
-            results = search_semantic(query=query, limit=limit, folder=folder)
-            
-            # FALLBACK: If ChromaDB returns nothing (e.g. index not yet built), 
-            # try the native Windows Indexer as a safety net.
-            if not results:
-                print("DEBUG: ChromaDB returned no results, falling back to Windows Indexer Content Search")
-                results = find_files(query=query, limit=limit, content_mode=True)
-                
             if isinstance(results, list):
                 if not results:
-                     return {"type": "results", "content": f"No matches found for '{query}'.", "data": [], "category": "files"}
+                     return {"type": "results", "content": f"No matches found for '{args.get('query')}'.", "data": [], "category": "files"}
                 
-                msg = f"Found {len(results)} matches in file content."
-                if any(r.get('kind') == 'semantic_match' for r in results):
-                    msg = f"Found {len(results)} relevant semantic matches in your files."
-                
+                msg = f"Found {len(results)} relevant semantic matches in your files."
                 return {"type": "results", "content": msg, "data": results, "category": "files"}
             else:
                 return {"type": "error", "content": str(results)}
 
         else:
-            # No matching function found -> It's a general chat query
+            # Fallback for chat or unknown intents
             return await fallback_to_chat()
                 
     except json.JSONDecodeError:
         return {"type": "text", "content": raw_content}
-            
     except Exception as e:
         error_trace = traceback.format_exc()
         print(f"Backend Error: {error_trace}")
-        with open("debug.log", "a") as f:
+        with open(get_log_file(), "a") as f:
             f.write(f"[{datetime.now()}] Backend Error: {error_trace}\n")
         return JSONResponse(content={"type": "error", "content": f"Backend Error: {str(e)}", "trace": error_trace}, status_code=500)
 
@@ -656,15 +610,13 @@ async def open_email(request: Request):
         provider = body.get("provider", "GMAIL")
         
         if provider == "OUTLOOK" and idx:
-            from mail.outlook_tools import open_email_by_id
-            success, msg = open_email_by_id(idx)
+            success, msg = connectors["mail_outlook"].open(idx)
             if success:
                 return {"status": "ok", "message": "Opened in Outlook"}
             else:
                 return JSONResponse(content={"status": "error", "message": msg}, status_code=500)
         elif provider == "FILES" and idx:
-            # For files, idx is the path
-            success, msg = open_file(idx)
+            success, msg = connectors["files"].open(idx)
             if success:
                 return {"status": "ok", "message": "File opened"}
             else:
@@ -701,7 +653,7 @@ async def restart_service():
 async def get_index_status():
     """Provides the current indexing percentage for the UI."""
     try:
-        status_file = ".index_status"
+        status_file = get_status_file()
         if os.path.exists(status_file):
             with open(status_file, "r") as f:
                 return json.load(f)

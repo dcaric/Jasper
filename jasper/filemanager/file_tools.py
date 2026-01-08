@@ -1,17 +1,7 @@
-import json
-import win32com.client
-import os
-from datetime import datetime
+from ..utility.config import get_setting, get_log_file
 
-# Load configuration
-try:
-    with open("constants.json", "r") as f:
-        config = json.load(f)
-        # Use config value if present, otherwise detect system user
-        USER_NAME = config.get("USER_NAME", os.getlogin())
-except Exception:
-    # Fallback to system user if config fails
-    USER_NAME = os.getlogin()
+# Detect system user
+USER_NAME = get_setting("USER_NAME", os.environ.get("USERNAME", "Unknown"))
 
 def find_files(query=None, name=None, date_from=None, date_to=None, limit=10, kind=None, content_mode=False):
     """
@@ -20,7 +10,7 @@ def find_files(query=None, name=None, date_from=None, date_to=None, limit=10, ki
     """
     try:
         # LOGGING TO FILE FOR DEBUGGING
-        with open("debug.log", "a") as f:
+        with open(get_log_file(), "a") as f:
              f.write(f"[{datetime.now()}] find_files EXECUTION -> kind='{kind}', content_mode={content_mode}\n")
 
         conn = win32com.client.Dispatch("ADODB.Connection")

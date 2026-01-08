@@ -1,9 +1,10 @@
 import chromadb
 from chromadb.utils import embedding_functions
 import os
+from .config import get_db_path
 
 # CONFIGURATION
-DB_PATH = "./chroma_db"
+DB_PATH = get_db_path()
 COLLECTION_NAME = "jasper_docs"
 
 # EMBEDDING MODEL (Must match indexer.py)

@@ -2,7 +2,7 @@ import imaplib
 import email
 from email.header import decode_header
 import os
-import json
+from ..utility.config import get_credentials
 import shlex
 import sys
 import datetime
@@ -46,23 +46,8 @@ def connect_imap(email_user, email_pass, provider="GMAIL"):
     except Exception as e:
         return f"Error connecting to IMAP ({provider}): {str(e)}"
 
-def get_credentials(provider="GMAIL"):
-    try:
-        with open("constants.json", "r") as f:
-            config = json.load(f)
-            
-            if provider == "OUTLOOK":
-                user = config.get("OUTLOOK_USER") or config.get("GMAIL_USER") # Fallback to GMAIL_USER if strictly using one email
-                password = config.get("OUTLOOK_PASS", config.get("OUTLOOK_PASSWORD"))
-            else:
-                user = config.get("GMAIL_USER")
-                password = config.get("GMAIL_PASS")
-                
-            if password:
-                password = password.replace(" ", "")
-            return user, password
-    except Exception:
-        return None, None
+# Credentials are now managed by utility.config
+pass
 
 def decode_mime_header(raw_header):
     if not raw_header:

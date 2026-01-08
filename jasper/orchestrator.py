@@ -1,15 +1,14 @@
-import ollama
 import json
-from mail.email_tools import find_emails as find_emails_gmail
-from mail.outlook_tools import find_emails as find_emails_outlook
+from .utility.config import get_setting
+from .mail.gmail_connector import GmailConnector
+from .mail.outlook_connector import OutlookConnector
+
+# Connectors
+gmail_conn = GmailConnector()
+outlook_conn = OutlookConnector()
 
 def get_provider():
-    try:
-        with open("constants.json", "r") as f:
-            config = json.load(f)
-            return config.get("PROVIDER", "GMAIL").upper()
-    except:
-        return "GMAIL"
+    return get_setting("PROVIDER", "GMAIL").upper()
 
 def orchestrator():
     # Force UTF-8 for CLI
@@ -129,7 +128,7 @@ def orchestrator():
                              print(f"DEBUG: Extracted date filter via regex: {date_filter}")
                     
                     # DATE PARSING (NEW: Support for FROM/TO)
-                    from utility.date_utils import extract_date_range
+                    from .utility.date_utils import extract_date_range
                     date_from, date_to = extract_date_range(date_filter or user_input)
 
                     # RAW MODEL OUTPUT
@@ -161,9 +160,9 @@ def orchestrator():
                     print(f"--- Fulfilling Search: provider='{final_provider}', sender='{sender}', subject='{subject}', limit={limit}, from='{date_from}', to='{date_to}' ---")
                     
                     if final_provider == "OUTLOOK":
-                        results = find_emails_outlook(sender_name=sender, subject_text=subject, limit=limit, date_from=date_from, date_to=date_to)
+                        results = outlook_conn.search(sender=sender, subject=subject, limit=limit, date_from=date_from, date_to=date_to)
                     else:
-                        results = find_emails_gmail(sender_name=sender, subject_text=subject, limit=limit, date_from=date_from, date_to=date_to)
+                        results = gmail_conn.search(sender=sender, subject=subject, limit=limit, date_from=date_from, date_to=date_to)
                         
                     if isinstance(results, list):
                         if not results:

@@ -22,7 +22,7 @@ echo [INFO] Detected Python: %PYTHON_EXE%
 :: Create the run_indexer.bat file dynamically (Portable version)
 echo @echo off > "%PROJECT_DIR%\run_indexer.bat"
 echo cd /d "%%~dp0" >> "%PROJECT_DIR%\run_indexer.bat"
-echo python ..\utility\indexer.py >> "%PROJECT_DIR%\run_indexer.bat"
+echo python -m jasper.utility.indexer refresh >> "%PROJECT_DIR%\run_indexer.bat"
 
 echo [INFO] run_indexer.bat created.
 
@@ -33,10 +33,10 @@ call ollama pull functiongemma:270m
 call ollama pull gemma3:4b
 
 echo Creating Custom Function Model...
-call ollama create functiongemma -f ..\utility\Modelfile
+call ollama create functiongemma -f ..\jasper\utility\Modelfile
 
 echo Creating Custom Chat Model (Jasper)...
-call ollama create gemma3 -f ..\utility\ModelfileGemma3
+call ollama create gemma3 -f ..\jasper\utility\ModelfileGemma3
 echo [INFO] Models verified.
 
 :: Create Scheduled Tasks

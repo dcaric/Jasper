@@ -1,4 +1,6 @@
-# Jasper - AI Assistant
+# Jasper - AI Assistant (V1.1 Stable)
+> [!NOTE]
+> Jasper is currently **Windows-First**. Native support for macOS and Linux is on the roadmap.
 
 Jasper is a high-performance AI agent designed to bridge the gap between your local files, emails, and the web. Built in just three days, it serves as a unified "Knowledge Hub" that consolidates information across silos where standard tools like Outlook, File Explorer, and Gmail often stop.
 
@@ -8,12 +10,16 @@ Unlike native search tools that may fail to index deep file content, Jasper uses
 ![Jasper Search Results](images/j2.png)
 
 ## Features
-- **Unified Search**: Consolidate searches across Gmail, Outlook, Local Files, and the Web.
+- **Unified Search**: Consolidate searches across Gmail, Outlook, Local Files, and the Web via a standardized plugin interface.
 - **AI Architecture**: Powered by a multi-model stack (FunctionGemma, Gemma3, and Gemini).
 - **Semantic Content Search**: Search *inside* files (HTML, JS, CSS, TXT) using AI-powered meaning matching (ChromaDB).
 - **Privacy First**: Local files are processed locally; Cloud models are only used for real-time web data.
+- **Index Lifecycle**: Formalized CLI for building, refreshing, and pruning your knowledge index.
+- **Professional Architecture**: Refactored into a modular Python package for easier maintenance.
 - **Deep Linking**: Open emails or files directly with one click.
 - **Background Service**: Runs silently in the background and starts automatically with Windows.
+
+For a detailed history of changes, see the [Changelog](./CHANGELOG.md).
 
 ## AI Architecture
 Jasper is built on a specialized 4-tier engine:
@@ -28,24 +34,46 @@ For a complete step-by-step setup on a new machine, please see [SETUP.md](./SETU
 Quick start:
 1. Clone the repo.
 2. `pip install -r requirements.txt`
-3. Copy `constants.json.example` to `constants.json`.
-4. Run `setup_automation.bat` as Administrator.
+3. Run `python run.py`.
+   - *Jasper will automatically pull missing models and build your initial index.*
+4. Run `startup/setup_automation.bat` as Administrator to enable recurring indexing.
 
-## Configuration
-Jasper detects your email provider automatically based on your `constants.json` settings:
+Jasper prioritizes security by separating secrets from configuration:
 
-### Option A: Gmail (Personal)
-Set `"PROVIDER": "GMAIL"` in `constants.json`.
-- Enable IMAP in Gmail.
-- Use a Google "App Password" for the `GMAIL_PASS` field.
+### 1. Secrets (.env)
+Copy `.env.example` to `.env`. This is where you store:
+- `GEMINI_API_KEY` (Get one at [Google AI Studio](https://aistudio.google.com/))
+- `GMAIL_PASS` (Google App Password)
+- `OUTLOOK_PASS` (If using IMAP mode)
 
-### Option B: Outlook Classic (Company)
-Set `"PROVIDER": "OUTLOOK"` in `constants.json`.
-- Requires **Outlook Classic** (not the "New Outlook" web-app version).
-- Ensure Outlook is signed in on your laptop.
+### 2. General Settings (constants.json)
+Use `constants.json` for non-sensitive tweaks:
+- `"PROVIDER"`: `"GMAIL"` or `"OUTLOOK"`
+- `"USER_NAME"`: Your Windows profile name.
+
+---
+
+### Email Provider Setup
+- **Gmail**: Enable IMAP in settings and use an **App Password**.
+- **Outlook Classic**: Just ensure you are signed in. Jasper will use COM to talk to the local app.
+- **New Outlook / Web**: Use the IMAP settings in `.env`.
+
+## Advanced: Index Management
+Manage your semantic index via the CLI:
+```bash
+python -m jasper.utility.indexer status   # View index stats
+python -m jasper.utility.indexer refresh  # Incremental update
+python -m jasper.utility.indexer prune    # Remove deleted files
+python -m jasper.utility.indexer build    # Rebuild from scratch
+```
+
+## Platform Roadmap
+- [x] **Windows (V1.1 Stable)**: Full support for Local Indexing, Outlook COM, and Startup Tasks.
+- [ ] **macOS (Planned)**: Apple Mail connector, Spotlight-based local search.
+- [ ] **Linux (Planned)**: IMAP-first mode, Grep-based local fallback.
 
 ## Usage
-- **Start Jasper**: Run `run_web.ps1`.
+- **Start Jasper**: Run `startup/run_web.ps1`.
 - **Open Dashboard**: Go to [http://localhost:8000](http://localhost:8000).
 - **Auto-Startup**: Set Jasper to start at login by running this in an Administrator PowerShell window:
   ```powershell

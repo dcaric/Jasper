@@ -8,8 +8,8 @@ Write-Host "Press Ctrl+C to stop."
 
 while ($true) {
     Write-Host "[$(Get-Date)] Executing Orchestrator..." -ForegroundColor Gray
-    # Run the python script
-    python $scriptPath
+    # Run the orchestrator as a module
+    python -m jasper.orchestrator
     
     # If the script exits, wait 5 seconds and restart
     Write-Host "[$(Get-Date)] Orchestrator exited. Restarting in 5 seconds..." -ForegroundColor Red

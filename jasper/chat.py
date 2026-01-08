@@ -1,5 +1,6 @@
 import ollama
 import traceback
+from .utility.config import get_setting
 
 def chat_with_gemma(prompt):
     """
@@ -41,15 +42,11 @@ def call_gemini_cloud(query):
     try:
         from google import genai
         from google.genai import types
-        import json
-        
-        # Load API Key
-        with open("constants.json", "r") as f:
-            config = json.load(f)
-            api_key = config.get("GEMINI_API_KEY")
+        # Load API Key via config system
+        api_key = get_setting("GEMINI_API_KEY")
             
         if not api_key:
-            return "I need to check the web, but I don't have a GEMINI_API_KEY in constants.json."
+            return "I need to check the web, but I don't have a GEMINI_API_KEY set."
             
         print("DEBUG: Calling Gemini 2.0 Flash (Cloud)...")
         client = genai.Client(api_key=api_key)

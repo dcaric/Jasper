@@ -1,59 +1,52 @@
-# Jasper Project Setup Guide
+# Jasper Project Setup Guide (V1.1)
 
-Follow these steps to set up Jasper on a new machine.
+Jasper V1.1 features a **Smart Bootstrapper** that handles most of the configuration and data initialization for you.
 
 ## 1. Prerequisites
 - **Python 3.13+** (ensure it's in your PATH).
-- **Outlook Classic** (signed in) for "OUTLOOK" provider mode.
-- **Ollama** installed (from [ollama.com](https://ollama.com)).
+- **Ollama** installed and running (from [ollama.com](https://ollama.com)).
+- **Outlook Classic** (signed in) if you plan to use the "OUTLOOK" provider mode via COM.
 
-## 2. Repository Setup
-1. Clone the repository.
-2. Open a terminal in the project folder and install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 2. Quick Start (Process for New Users)
+1.  **Clone the Repository**.
+2.  **Install Dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+3.  **Run Jasper**:
+    ```bash
+    python run.py
+    ```
+    - **What happens next?** Jasper will automatically:
+        - Create your `.env` file from the example template.
+        - Verify and pull the required AI models (`functiongemma` and `gemma3:4b`).
+        - Build your initial semantic search index if it doesn't exist.
+        - Start the web dashboard at `http://localhost:8000`.
 
-## 3. Ollama Models Setup
-Jasper uses a custom alias for the model to remain compatible across different versions.
-1. Download the base model:
-   ```bash
-   ollama pull functiongemma:270m
-   ```
-2. Create the `functiongemma` alias:
-   ```bash
-   ollama create functiongemma -f utility/Modelfile
-   ```
-   *(Note: Ensure you have a `Modelfile` in the `utility` folder that points to `FROM functiongemma:270m`)*
+## 3. Configuration (Optional Tweaks)
+While Jasper bootstraps automatically, you may want to customize your setup:
 
-## 4. Configuration
-1. Copy `constants.json.example` to `constants.json`.
-2. Edit `constants.json` with your details:
-   - `PROVIDER`: Set to `"GMAIL"` or `"OUTLOOK"`.
-   - `GMAIL_USER` / `GMAIL_PASS`: Your Gmail address and App Password (if using Gmail).
-   - `OUTLOOK_USER` / `OUTLOOK_PASS`: Your Outlook/Hotmail credentials (if using IMAP mode).
-   - `GEMINI_API_KEY`: Required for Jasper to check the web/news.
-   - `USER_NAME`: Your Windows login name (used for file search fallbacks).
+### Secrets (.env)
+Edit the newly created `.env` file to add:
+- `GEMINI_API_KEY`: Get one at [Google AI Studio](https://aistudio.google.com/).
+- `GMAIL_PASS`: Your Google App Password.
 
-## 5. Automation & Indexing Setup
-To set up the automatic indexing at 9 AM and 1 PM:
-1. Navigate to the `startup` folder.
-2. Right-click `setup_automation.bat` and **Run as Administrator**.
-   - This script will detect your Python path and create the necessary Windows Scheduled Tasks.
-3. Run an initial index manually to build the search database:
-   ```bash
-   python utility/indexer.py
-   ```
+### Settings (constants.json)
+Edit `constants.json` for:
+- `"PROVIDER"`: Change between `"GMAIL"` and `"OUTLOOK"`.
+- `"USER_NAME"`: Your Windows profile name for file path resolution.
 
-## 6. How to Run
-- **Start the Server**: Run `python app.py`.
-- **Open the UI**: Navigate to `http://localhost:8000` in your browser.
+## 4. Automation & Background Service
+To ensure Jasper stays updated and runs in the background:
+1.  **Configure Automation**: 
+    - Open a terminal in the `startup` folder.
+    - Run `setup_automation.bat` as Administrator.
+    - This schedules indexing to run periodically in the background.
 
-## Project Structure
-- `app.py`: Main FastAPI server and AI logic.
-- `mail/`: Gmail and Outlook search logic.
-- `utility/`: Indexer, semantic search tools, and config models.
-- `filemanager/`: Local file search and management.
-- `startup/`: Service runners and automation scripts.
-- `/static`: The web dashboard files.
-- `/chroma_db`: Local persistent memory (created after first index).
+## 5. Manual Index Management
+You can also manage the index manually via the CLI:
+```bash
+python -m jasper.utility.indexer status   # View index stats
+python -m jasper.utility.indexer refresh  # Incremental update
+python -m jasper.utility.indexer build    # Full rebuild
+```

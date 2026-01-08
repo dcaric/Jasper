@@ -11,7 +11,7 @@ if ($portStatus) {
 
 while ($true) {
     Write-Host "[$(Get-Date)] Starting Jasper Web Dashboard..." -ForegroundColor Green
-    python ..\app.py
+    python ..\run.py
     
     Write-Host "[$(Get-Date)] Jasper exited. Restarting in 2 seconds..." -ForegroundColor Red
     Start-Sleep -Seconds 2
