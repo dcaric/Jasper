@@ -1,16 +1,26 @@
 # Jasper - AI Assistant
 
-Jasper is a high-performance AI agent that helps you search and summarize your emails using the `FunctionGemma:270M` model.
+Jasper is a high-performance AI agent designed to bridge the gap between your local files, emails, and the web. Built in just three days, it serves as a unified "Knowledge Hub" that consolidates information across silos where standard tools like Outlook, File Explorer, and Gmail often stop.
+
+Unlike native search tools that may fail to index deep file content, Jasper uses a hybrid approach of local AI and vector databases to ensure no document or email is left behind.
 
 ![Jasper Workspace](images/j1.png)
 ![Jasper Search Results](images/j2.png)
 
 ## Features
-- **WhatsApp-style Web UI**: Modern, responsive, and legible design.
-- **Multi-Provider Support**: Works with **Gmail (IMAP)** and **Outlook Classic (COM)**.
+- **Unified Search**: Consolidate searches across Gmail, Outlook, Local Files, and the Web.
+- **AI Architecture**: Powered by a multi-model stack (FunctionGemma, Gemma3, and Gemini).
 - **Semantic Content Search**: Search *inside* files (HTML, JS, CSS, TXT) using AI-powered meaning matching (ChromaDB).
+- **Privacy First**: Local files are processed locally; Cloud models are only used for real-time web data.
 - **Deep Linking**: Open emails or files directly with one click.
 - **Background Service**: Runs silently in the background and starts automatically with Windows.
+
+## AI Architecture
+Jasper is built on a specialized 4-tier engine:
+1. **FunctionGemma (300MB)**: Our "Intent Controller." It runs locally to detect your commands and route them to the right tool.
+2. **Gemma3 4B**: Our "Summarization Specialist." It handles deep-dives into your documents and email threads.
+3. **Gemini (with Search)**: Our "Web Bridge." Used exclusively for real-time data like weather, stocks, and news.
+4. **ChromaDB**: Our "Memory." A vector database that chunks and stores your local files for semantic search.
 
 ## Installation & Setup
 For a complete step-by-step setup on a new machine, please see [SETUP.md](./SETUP.md).
