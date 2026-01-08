@@ -94,60 +94,90 @@ def find_files(query=None, name=None, date_from=None, date_to=None, limit=10, ki
         # LOCAL FALLBACK: Check workspace specifically
         # Now this will trigger if SQL returned nothing relevant (filtered list is empty)
         if query and (not results or len(query) <= 3):
-            potential_paths = [
+            # Paths to search recursively (1-2 levels)
+            potential_roots = [
                 f"C:\\Users\\{USER_NAME}\\ML",
-                f"C:\\Users\\{USER_NAME}\\ML\\Jasper",
                 f"C:\\Users\\{USER_NAME}\\WORKING",
                 f"C:\\Users\\{USER_NAME}\\repos",
-                f"C:\\Users\\{USER_NAME}",
-                f"C:\\Users\\{USER_NAME}\\Downloads",
                 f"C:\\Users\\{USER_NAME}\\Documents",
-                os.getcwd(),
-                os.path.dirname(os.getcwd())
+                f"C:\\Users\\{USER_NAME}\\Downloads",
+                os.getcwd()
             ]
+            
             fallback_results = []
-            for p in potential_paths:
-                p = os.path.normpath(p)
-                if not os.path.exists(p): 
+            seen_paths = {os.path.normpath(r["path"]).lower() for r in results}
+            
+            # Alias Robustness: If they search for 'Project', also check 'Projekt' (and vice-versa)
+            query_vars = [query.lower()]
+            if "project" in query_vars[0]:
+                query_vars.append(query_vars[0].replace("project", "projekt"))
+            elif "projekt" in query_vars[0]:
+                query_vars.append(query_vars[0].replace("projekt", "project"))
+
+            import time
+            start_time = time.time()
+            timeout = 5.0 # Max 5 seconds for recursive search
+
+            for root in potential_roots:
+                root = os.path.normpath(root)
+                if not os.path.exists(root): 
                     continue
                 
-                # Check the folder itself
-                bname = os.path.basename(p)
-                if query.lower() in bname.lower():
-                    exists = any(os.path.normpath(r["path"]).lower() == p.lower() for r in results)
-                    if not exists:
-                        fallback_results.append({
-                            "name": bname,
-                            "path": p,
-                            "date": str(datetime.fromtimestamp(os.path.getmtime(p))),
-                            "size": 0,
-                            "extension": "",
-                            "kind": "folder"
-                        })
-                
-                # Check immediate children
-                try:
-                    for item in os.listdir(p):
-                        if query.lower() in item.lower():
-                            full_path = os.path.normpath(os.path.join(p, item))
-                            if not any(os.path.normpath(r["path"]).lower() == full_path.lower() for r in results):
-                                is_dir = os.path.isdir(full_path)
-                                
-                                # Apply kind filter if present
-                                if kind and kind.lower() in ['folder', 'directory'] and not is_dir:
+                if time.time() - start_time > timeout: break
+
+                # Walk limited levels to maintain speed
+                for current_dir, dirs, files in os.walk(root):
+                    if time.time() - start_time > timeout: break
+                    
+                    # Calculate depth
+                    rel_path = os.path.relpath(current_dir, root)
+                    depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
+                    
+                    if depth > 2: # Stop at 2 levels deep for performance
+                        del dirs[:] # Don't go deeper
+                        continue
+
+                    # Check files
+                    for filename in files:
+                        fname_lower = filename.lower()
+                        if any(qv in fname_lower for qv in query_vars):
+                            full_path = os.path.normpath(os.path.join(current_dir, filename))
+                            if full_path.lower() not in seen_paths:
+                                if kind and kind.lower() in ['folder', 'directory']:
                                     continue
                                     
                                 fallback_results.append({
-                                    "name": item,
+                                    "name": filename,
                                     "path": full_path,
                                     "date": str(datetime.fromtimestamp(os.path.getmtime(full_path))),
-                                    "size": os.path.getsize(full_path) if not is_dir else 0,
-                                    "extension": os.path.splitext(item)[1] if not is_dir else "",
-                                    "kind": "folder" if is_dir else "document"
+                                    "size": os.path.getsize(full_path),
+                                    "extension": os.path.splitext(filename)[1],
+                                    "kind": "document"
                                 })
-                except:
-                    continue
-                
+                                seen_paths.add(full_path.lower())
+                                if len(results) + len(fallback_results) >= limit: break
+
+                    # Check directories
+                    for dname in dirs:
+                        dname_low = dname.lower()
+                        if any(qv in dname_low for qv in query_vars):
+                            full_path = os.path.normpath(os.path.join(current_dir, dname))
+                            if full_path.lower() not in seen_paths:
+                                if kind and kind.lower() not in ['folder', 'directory', 'any']:
+                                    continue
+                                
+                                fallback_results.append({
+                                    "name": dname,
+                                    "path": full_path,
+                                    "date": str(datetime.fromtimestamp(os.path.getmtime(full_path))),
+                                    "size": 0,
+                                    "extension": "",
+                                    "kind": "folder"
+                                })
+                                seen_paths.add(full_path.lower())
+                                if len(results) + len(fallback_results) >= limit: break
+                    
+                    if len(results) + len(fallback_results) >= limit: break
                 if len(results) + len(fallback_results) >= limit: break
             
             # Prepend fallback results
@@ -169,11 +199,31 @@ def open_file(path):
 
 def read_file_content(path, max_chars=10000):
     """
-    Reads text content from a file, supporting multiple encodings.
+    Reads text content from a file, supporting multiple encodings and PDF.
     """
     if not os.path.exists(path):
         return None
         
+    ext = os.path.splitext(path)[1].lower()
+    
+    # PDF SUPPORT
+    if ext == '.pdf':
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(path)
+            text = ""
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+                if len(text) >= max_chars:
+                    break
+            return text[:max_chars] if text else "PDF found but no extractable text."
+        except Exception as e:
+            print(f"DEBUG: PDF extraction failed: {e}")
+            return f"Error reading PDF: {str(e)}"
+
+    # TEXT FILE SUPPORT
     try:
         # Try UTF-8 first
         with open(path, 'r', encoding='utf-8') as f:

@@ -11,43 +11,45 @@ INTENTS:
 - 'semantic': Ask questions or search content (query, folder, summarize).
 - 'chat': Greetings and general talk (short message).
 
-EXAMPLES:
-Input: search gmail for subject 'ljeto zavala' last 40 days and summarize
-{"intent": "mail", "params": {"provider": "GMAIL", "subject": "ljeto zavala", "date_filter": "last 40 days", "summarize": true}}
+CRITICAL: 
+1. Preserve exact spelling for names and file queries. Do not autocorrect!
+2. Only set "summarize": true if the user explicitly asks to "summarize", "overview", or "briefly explain". 
+3. If the user just says "find", "search", or "get", set "summarize": false.
 
-Input: summarize gmail from sonja last 3 days
-{"intent": "mail", "params": {"sender": "sonja", "provider": "GMAIL", "date_filter": "last 3 days", "summarize": true}}
+EXAMPLES:
+Input: search for file Projekt_ASBP_2024_EN and summarize
+{"intent": "files", "params": {"query": "Projekt_ASBP_2024_EN", "summarize": true}}
+
+Input: search for file Projekt_ASBP_2024_EN
+{"intent": "files", "params": {"query": "Projekt_ASBP_2024_EN", "summarize": false}}
+
+Input: find file Projekt_IPA
+{"intent": "files", "params": {"query": "Projekt_IPA", "summarize": false}}
 
 Input: find and summarize files about 'budget'
 {"intent": "files", "params": {"query": "budget", "summarize": true}}
 
+Input: summarize gmail from sonja last 3 days
+{"intent": "mail", "params": {"sender": "sonja", "provider": "GMAIL", "date_filter": "last 3 days", "summarize": true}}
+
+Input: find emails from Ivan
+{"intent": "mail", "params": {"sender": "Ivan", "provider": "OUTLOOK", "summarize": false}}
+
 Input: search gmail for subject 'ljeto zavala' last 40 days
-{"intent": "mail", "params": {"provider": "GMAIL", "subject": "ljeto zavala", "date_filter": "last 40 days"}}
-
-Input: find emails from Ivan with attachment
-{"intent": "mail", "params": {"sender": "Ivan", "provider": "OUTLOOK", "has_attachment": true}}
-
-Input: find boris
-{"intent": "mail", "params": {"sender": "boris", "provider": "OUTLOOK"}}
+{"intent": "mail", "params": {"provider": "GMAIL", "subject": "ljeto zavala", "date_filter": "last 40 days", "summarize": false}}
 
 Input: find mail from zvone
-{"intent": "mail", "params": {"sender": "zvone", "provider": "OUTLOOK"}}
-
-Input: find emails about Hvar
-{"intent": "mail", "params": {"body": "Hvar", "provider": "OUTLOOK"}}
+{"intent": "mail", "params": {"sender": "zvone", "provider": "OUTLOOK", "summarize": false}}
 
 Input: find file ModelfileMeveric
-{"intent": "files", "params": {"query": "ModelfileMeveric"}}
+{"intent": "files", "params": {"query": "ModelfileMeveric", "summarize": false}}
 
 Input: find "Maverick" in the logs folder and summarize
 {"intent": "semantic", "params": {"query": "Maverick", "folder": "logs", "summarize": true}}
 
-Input: what is AI in the Jasper folder?
-{"intent": "semantic", "params": {"query": "what is AI", "folder": "Jasper"}}
+Input: what is in the Jasper folder?
+{"intent": "semantic", "params": {"query": "what is in the Jasper folder", "folder": "Jasper", "summarize": false}}
 
 Input: hi
 {"intent": "chat", "params": {"message": "hi"}}
-
-Input: search for content "project plan"
-{"intent": "semantic", "params": {"query": "project plan"}}
 """

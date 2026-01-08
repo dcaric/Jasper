@@ -12,6 +12,7 @@ from .utility.config import get_setting, get_log_file, get_status_file
 from .mail.gmail_connector import GmailConnector
 from .mail.outlook_connector import OutlookConnector
 from .filemanager.file_connector import FileConnector
+from .filemanager.file_tools import read_file_content
 from .utility.semantic_connector import SemanticConnector
 
 # Connector Registry
@@ -97,6 +98,50 @@ def summarize_results_with_gemma(results, original_query):
     except Exception as e:
         return f"I performed the search but failed to generate a summary: {str(e)}"
 
+def summarize_files_iteratively(files, original_query):
+    """
+    Summarizes a list of files by reading their content and 
+    summarizing them one by one.
+    """
+    if not files:
+        return "I found no files to summarize."
+
+    summaries = []
+    actual_file_count = 0
+    
+    for item in files:
+        if item.get("kind") == "folder":
+            continue
+            
+        actual_file_count += 1
+        path = item.get("path")
+        name = item.get("name")
+        
+        content = read_file_content(path, max_chars=8000)
+        if not content:
+            summaries.append(f"**FILE: {name}**\nPath: `{path}`\nStatus: *Could not read file content (binary or inaccessible).*")
+            continue
+
+        prompt = (
+            f"The user is searching for: '{original_query}'.\n"
+            f"Please summarize the following content from the file '{name}':\n\n"
+            f"FILE CONTENT:\n{content}\n\n"
+            "INSTRUCTION: Provide a concise, professional summary of what this file is about. "
+            "Do not output JSON or trigger external searches."
+        )
+
+        try:
+            from . import chat
+            file_summary = chat.chat_with_gemma(prompt, allow_fallback=False)
+            summaries.append(f"**FILE: {name}**\nPath: `{path}`\nSummary: {file_summary}")
+        except Exception as e:
+            summaries.append(f"**FILE: {name}**\nPath: `{path}`\nError: *Failed to summarize: {str(e)}*")
+
+    if actual_file_count == 0:
+        return "I found only folders, which cannot be summarized by content. Please specify a file name."
+
+    return "\n\n---\n\n".join(summaries)
+
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
     with open(os.path.join(static_path, "index.html"), "r") as f:
@@ -170,6 +215,15 @@ async def process_query(request: Request):
             intent = data.get("intent")
             params = data.get("params", {})
             should_summarize = params.get("summarize", False)
+            
+            # DETERMINISTIC SUMMARIZATION GUARD (Safety Net)
+            # If the model is over-eager, we check if the user actually asked for it
+            summarize_keywords = ['summarize', 'summary', 'overview', 'briefly', 'explain', 'sažmi', 'pregled']
+            low_input = user_input.lower()
+            if should_summarize and not any(k in low_input for k in summarize_keywords):
+                print(f"DEBUG: Summarize Guard triggered. Forcing 'should_summarize=False' due to lack of keywords.")
+                should_summarize = False
+                
             folder = None
             
             # DETERMINISTIC INTENT OVERRIDE (Safety Net)
@@ -609,7 +663,7 @@ async def process_query(request: Request):
                     return {"type": "results", "content": "No files found.", "data": [], "category": "files"}
                 else:
                     if should_summarize:
-                        summary_res = summarize_results_with_gemma(results, user_input)
+                        summary_res = summarize_files_iteratively(results, user_input)
                         return {"type": "chat", "content": summary_res}
                     return {"type": "results", "content": f"Found {len(results)} files.", "data": results, "category": "files"}
             else:
