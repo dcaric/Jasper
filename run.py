@@ -114,7 +114,12 @@ def bootstrap():
 
     # 2. Check Ollama Models
     print("[BOOTSTRAP] Step 2: Verifying Ollama models...")
-    required_models = ["functiongemma", "gemma3:4b"]
+    required_base_models = ["functiongemma:270m", "gemma3:4b"]
+    custom_models = {
+        "jasper": BASE_DIR / "jasper" / "utility" / "Modelfile",
+        "gemma3": BASE_DIR / "jasper" / "utility" / "ModelfileGemma3"
+    }
+    
     try:
         # Check if ollama is available
         subprocess.run(["ollama", "--version"], capture_output=True, check=True)
@@ -123,12 +128,26 @@ def bootstrap():
         result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
         installed_models = result.stdout.lower()
         
-        for model in required_models:
+        # 1. Pull Base Models
+        for model in required_base_models:
             if model.lower() not in installed_models:
-                print(f"[BOOTSTRAP] Model '{model}' not found. Pulling now (this may take a while)...")
+                print(f"[BOOTSTRAP] Base model '{model}' not found. Pulling now (this may take a while)...")
                 subprocess.run(["ollama", "pull", model], check=True)
             else:
-                print(f"[BOOTSTRAP] Model '{model}' verified.")
+                print(f"[BOOTSTRAP] Base model '{model}' verified.")
+        
+        # 2. Create Custom Models
+        for model_name, modelfile_path in custom_models.items():
+            if model_name.lower() not in installed_models:
+                if modelfile_path.exists():
+                    print(f"[BOOTSTRAP] Custom model '{model_name}' missing. Creating from {modelfile_path.name}...")
+                    subprocess.run(["ollama", "create", model_name, "-f", str(modelfile_path)], check=True)
+                    print(f"[BOOTSTRAP] Custom model '{model_name}' created successfully.")
+                else:
+                    print(f"[WARNING] Modelfile for '{model_name}' not found at {modelfile_path}")
+            else:
+                print(f"[BOOTSTRAP] Custom model '{model_name}' verified.")
+
     except Exception as e:
         print(f"[WARNING] Could not verify Ollama models: {e}")
         print("Please ensure Ollama is installed and running.")
@@ -152,13 +171,40 @@ def bootstrap():
     print("--- Bootstrap Complete ---\n")
 
 if __name__ == "__main__":
-    # FIRST: Ensure we are in a proper environment
-    ensure_venv()
-    
-    # SECOND: Run the functional bootstrap (models, index, config)
-    bootstrap()
-    
-    # THIRD: Start the server
     import uvicorn
-    # Use the string-based import for uvicorn to support hot-reloading if needed
-    uvicorn.run("jasper.app:app", host="0.0.0.0", port=8000, reload=True)
+    import time
+    
+    # supervisor loop
+    while True:
+        try:
+            # FIRST: Ensure we are in a proper environment (this might restart the script itself)
+            ensure_venv()
+            
+            # SECOND: Run the functional bootstrap (models, index, config)
+            bootstrap()
+            
+            # THIRD: Start the server
+            print("[SERVER] Starting Jasper on http://localhost:8000")
+            # We run uvicorn in a way that allows us to catch exits if possible, 
+            # though uvicorn.run blocks.
+            # If the user clicks "Restart" in the UI, our app will exit with code 0 or 3.
+            # On Windows, os._exit(0) from a thread often terminates the whole process.
+            uvicorn.run("jasper.app:app", host="0.0.0.0", port=8000, reload=True)
+            
+            # If we reach here, uvicorn finished normally (e.g. CTRL+C)
+            break
+            
+        except SystemExit as e:
+            # Catch os._exit or sys.exit
+            if e.code == 0:
+                print("[SUPERVISOR] Server requested restart. Re-bootstrapping...")
+                time.sleep(1)
+                continue
+            else:
+                raise
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"[ERROR] Supervisor caught exception: {e}")
+            time.sleep(2)
+            continue

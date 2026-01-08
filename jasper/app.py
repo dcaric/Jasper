@@ -29,7 +29,7 @@ if not os.path.exists(static_path):
     os.makedirs(static_path)
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-MODEL_NAME = "functiongemma"
+MODEL_NAME = "jasper"
 
 def get_provider():
     return get_setting("PROVIDER", "GMAIL").upper()
@@ -639,11 +639,10 @@ async def restart_service():
         import threading
         
         def kill_self():
-            import time
             import sys
             time.sleep(1)
             print("RESTART TRIGGERED: Exiting process for auto-restart...")
-            os._exit(0) # Force exit to ensure loop catches it
+            sys.exit(0) # Signal supervisor to restart
             
         threading.Thread(target=kill_self).start()
         return {"status": "ok", "message": "Restarting Jasper..."}
