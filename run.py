@@ -4,9 +4,56 @@ import shutil
 import subprocess
 from pathlib import Path
 
-# Add the current directory to sys.path to ensure 'jasper' is importable
+# Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR))
+
+VENV_DIR = BASE_DIR / "venv"
+
+def is_venv():
+    """Checks if the script is currently running inside a virtual environment."""
+    return (
+        hasattr(sys, 'real_prefix') or
+        (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+    )
+
+def ensure_venv():
+    """
+    Ensures that a virtual environment exists and has dependencies installed.
+    If not running in venv, it restarts itself with the venv python.
+    """
+    if is_venv():
+        return # Already in venv
+
+    print("[BOOTSTRAP] Environment check: Not in a virtual environment.")
+    
+    # 1. Create venv if missing
+    if not VENV_DIR.exists():
+        print(f"[BOOTSTRAP] Creating virtual environment in {VENV_DIR}...")
+        subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+        print("[BOOTSTRAP] Venv created.")
+
+    # 2. Identify venv python
+    if os.name == 'nt':
+        venv_python = VENV_DIR / "Scripts" / "python.exe"
+    else:
+        venv_python = VENV_DIR / "bin" / "python"
+
+    if not venv_python.exists():
+        print(f"[ERROR] Could not find python in {venv_python}")
+        sys.exit(1)
+
+    # 3. Check/Install dependencies
+    requirements = BASE_DIR / "requirements.txt"
+    if requirements.exists():
+        print("[BOOTSTRAP] Verifying dependencies (pip install)...")
+        # We run pip install to ensure everything is there. 
+        # Pip is smart enough to skip if already satisfied.
+        subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements)], check=True)
+
+    # 4. Re-execute the script using the venv python
+    print("[BOOTSTRAP] Restarting within virtual environment...\n")
+    os.execv(str(venv_python), [str(venv_python)] + sys.argv)
 
 def bootstrap():
     print("--- Jasper Smart Bootstrap ---")
@@ -56,8 +103,13 @@ def bootstrap():
     print("--- Bootstrap Complete ---\n")
 
 if __name__ == "__main__":
+    # FIRST: Ensure we are in a proper environment
+    ensure_venv()
+    
+    # SECOND: Run the functional bootstrap (models, index, config)
     bootstrap()
     
+    # THIRD: Start the server
     import uvicorn
     # Use the string-based import for uvicorn to support hot-reloading if needed
     uvicorn.run("jasper.app:app", host="0.0.0.0", port=8000, reload=True)

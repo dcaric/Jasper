@@ -1,6 +1,6 @@
 # Jasper Project Setup Guide (V1.1)
 
-Jasper V1.1 features a **Smart Bootstrapper** that handles most of the configuration and data initialization for you.
+Jasper V1.1 features a **Smart Bootstrapper** that handles the environment, configuration, and data initialization for you.
 
 ## 1. Prerequisites
 - **Python 3.13+** (ensure it's in your PATH).
@@ -9,15 +9,13 @@ Jasper V1.1 features a **Smart Bootstrapper** that handles most of the configura
 
 ## 2. Quick Start (Process for New Users)
 1.  **Clone the Repository**.
-2.  **Install Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-3.  **Run Jasper**:
+2.  **Run Jasper**:
     ```bash
     python run.py
     ```
     - **What happens next?** Jasper will automatically:
+        - Create a virtual environment (`venv/`) if it doesn't exist.
+        - Install all required dependencies (`pip install -r requirements.txt`).
         - Create your `.env` file from the example template.
         - Verify and pull the required AI models (`functiongemma` and `gemma3:4b`).
         - Build your initial semantic search index if it doesn't exist.

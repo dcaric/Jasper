@@ -33,10 +33,9 @@ For a complete step-by-step setup on a new machine, please see [SETUP.md](./SETU
 
 Quick start:
 1. Clone the repo.
-2. `pip install -r requirements.txt`
-3. Run `python run.py`.
-   - *Jasper will automatically pull missing models and build your initial index.*
-4. Run `startup/setup_automation.bat` as Administrator to enable recurring indexing.
+2. Run `python run.py`.
+   - *Jasper will automatically create a virtual environment, install dependencies, pull missing models, and build your initial index.*
+3. Run `startup/setup_automation.bat` as Administrator to enable recurring indexing.
 
 Jasper prioritizes security by separating secrets from configuration:
 
