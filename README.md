@@ -37,8 +37,13 @@ For highly sensitive or performance-critical data (Local Files, Mail), Jasper us
 ## Future Roadmap: External Ecosystem (MCP)
 To enable Jasper to grow into a massive ecosystem, we are adopting the **Model Context Protocol (MCP)** for the "Integration Layer."
 
+> [!IMPORTANT]
+> **Technical Note**: Jasper is moving toward a **Model-Agnostic tool architecture**. By implementing MCP, we ensure that Jasper's local knowledge remains private while enabling "Plug-and-Play" connectivity with the broader agent ecosystem.
+
 - **Modular Plugins**: Future support for Slack, Jira, GitHub, and Kita will be implemented as **MCP Servers**. This allows Jasper to "plug and play" with any external community tool without bloating the core code.
 - **Cloud AI Integration**: MCP will act as the bridge between Jasper's local knowledge and advanced cloud agents.
+
+![Jasper MCP Roadmap](images/j5.jpg)
 
 ## Installation & Setup
 For a complete step-by-step setup on a new machine, please see [SETUP.md](./SETUP.md).
