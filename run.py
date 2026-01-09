@@ -23,53 +23,71 @@ def ensure_venv():
     Ensures that a virtual environment exists and has dependencies installed.
     If not running in venv, it restarts itself with the venv python.
     """
+    # 0. Identify venv directory (support both .venv and venv)
+    target_venv = VENV_DIR
+    if not target_venv.exists() and (BASE_DIR / ".venv").exists():
+        target_venv = BASE_DIR / ".venv"
+
     if is_venv():
-        # Quick health check: is pip available?
-        try:
-            import pip
-            return # Already in healthy venv
-        except ImportError:
-            print("[BOOTSTRAP] Warning: Running in a virtual environment where 'pip' is missing.")
-            print("[BOOTSTRAP] This environment is likely corrupted.")
-            print("[TIP] To fix: Close this terminal, delete the 'venv' folder manually, and run 'python run.py' again.")
-            sys.exit(1)
+        # Even if we are in a venv, we should verify dependencies
+        print("[BOOTSTRAP] Environment check: Already in virtual environment. Verifying dependencies...")
+        check_dependencies(sys.executable)
+        return
 
     print("[BOOTSTRAP] Environment check: Using virtual environment...")
     
     # 1. Create venv if missing or broken
-    is_broken = VENV_DIR.exists() and not (VENV_DIR / "pyvenv.cfg").exists()
+    is_broken = target_venv.exists() and not (target_venv / "pyvenv.cfg").exists()
     
-    if not VENV_DIR.exists() or is_broken:
+    if not target_venv.exists() or is_broken:
         if is_broken:
-            print("[BOOTSTRAP] Virtual environment directory exists but is corrupted (missing pyvenv.cfg).")
+            print(f"[BOOTSTRAP] Virtual environment directory '{target_venv.name}' exists but is corrupted.")
             print("[BOOTSTRAP] Attempting to repair/recreate...")
         else:
-            print(f"[BOOTSTRAP] Creating virtual environment in {VENV_DIR}...")
+            print(f"[BOOTSTRAP] Creating virtual environment in {target_venv}...")
             
         try:
-            subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+            subprocess.run([sys.executable, "-m", "venv", str(target_venv)], check=True)
             print("[BOOTSTRAP] Venv created/repaired.")
         except subprocess.CalledProcessError as e:
             print(f"[ERROR] Failed to create virtual environment: {e}")
-            print("[TIP] Try deleting the 'venv' folder manually and running the script again.")
+            print("[TIP] Try deleting the 'venv' or '.venv' folder manually and running the script again.")
             sys.exit(1)
 
     # 2. Identify venv python
     if os.name == 'nt':
-        venv_python = VENV_DIR / "Scripts" / "python.exe"
+        venv_python = target_venv / "Scripts" / "python.exe"
     else:
-        venv_python = VENV_DIR / "bin" / "python"
+        venv_python = target_venv / "bin" / "python"
 
     if not venv_python.exists():
         print(f"[ERROR] Could not find python in {venv_python}")
         sys.exit(1)
 
     # 3. Check/Install dependencies
+    check_dependencies(venv_python, target_venv)
+
+    # 4. Re-execute the script using the venv python
+    print(f"[BOOTSTRAP] Switching to virtual environment python: {venv_python}")
+    os.execv(str(venv_python), [str(venv_python)] + sys.argv)
+
+def check_dependencies(python_exe, venv_dir=None):
+    """Verifies and installs dependencies if requirements.txt has changed."""
     requirements = BASE_DIR / "requirements.txt"
-    hash_file = VENV_DIR / ".requirements_hash"
+    
+    # If venv_dir is not provided, try to find it from the python_exe path
+    if venv_dir is None:
+        # python_exe is usually venv/Scripts/python.exe or venv/bin/python
+        python_path = Path(python_exe)
+        if os.name == 'nt':
+            venv_dir = python_path.parent.parent
+        else:
+            venv_dir = python_path.parent.parent
+            
+    hash_file = venv_dir / ".requirements_hash"
     
     if requirements.exists():
-        # 3b. Calculate current hash
+        # Calculate current hash
         with open(requirements, "rb") as f:
             current_hash = hashlib.md5(f.read()).hexdigest()
         
@@ -81,19 +99,17 @@ def ensure_venv():
         if current_hash != stored_hash:
             print("[BOOTSTRAP] Dependencies changed or not verified. Running pip install...")
             try:
-                subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements)], check=True)
+                subprocess.run([str(python_exe), "-m", "pip", "install", "-r", str(requirements)], check=True)
                 # Store the new hash only if pip succeeded
                 hash_file.write_text(current_hash)
                 print("[BOOTSTRAP] Dependencies updated and verified.")
             except subprocess.CalledProcessError as e:
                 print(f"[ERROR] Pip install failed: {e}")
-                sys.exit(1)
+                # We don't exit here if we are already in the venv, but we might want to
+                if not is_venv():
+                    sys.exit(1)
         else:
             print("[BOOTSTRAP] Dependencies verified (cached).")
-
-    # 4. Re-execute the script using the venv python
-    print(f"[BOOTSTRAP] Switching to virtual environment python: {venv_python}")
-    os.execv(str(venv_python), [str(venv_python)] + sys.argv)
 
 def bootstrap():
     print("--- Jasper Smart Bootstrap ---")

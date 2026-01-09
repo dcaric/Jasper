@@ -410,13 +410,24 @@ async def process_query(request: Request):
                          print(f"DEBUG: Clearing collision sender '{sender}' because matches subject '{subject}' and no explicit 'from'")
                          sender = None
                 
+            def recover_accents(fuzzy_text, raw_input):
+                """Restores original accents if AI normalized them (e.g. sumandl -> šumandl)."""
+                if not fuzzy_text or not raw_input: return fuzzy_text
+                if fuzzy_text.lower() in raw_input.lower(): return fuzzy_text
+                import unicodedata
+                def snorm(t): return "".join(c for c in unicodedata.normalize('NFD', t) if unicodedata.category(c) != 'Mn').lower()
+                target = snorm(fuzzy_text)
+                for w in raw_input.split():
+                    if snorm(w) == target: return w
+                return fuzzy_text
+
             if sender:
+                    sender = recover_accents(sender, user_input)
                     is_keyword = sender.lower() in invalid_senders
                     is_missing = sender.lower() not in user_input.lower()
                         
                     if is_keyword or is_missing:
                         should_recheck_sender = True
-                        with open("debug.log", "a") as f: f.write(f"[{datetime.now()}] Sender '{sender}' rejected (Keyword={is_keyword}, Missing={is_missing}). Rechecking.\n")
             else:
                     # If sender is missing but keywords are in input
                     if any(k in user_input.lower() for k in ["from", "for ", "search for "]):
@@ -424,27 +435,25 @@ async def process_query(request: Request):
                             
             if should_recheck_sender:
                 # Look for "from <word>" or "for <word>" - but prioritize 'from'
-                # and find ALL matches to filter out keywords correctly.
-                matches = re.findall(r"(?:from|for)\s+(\w+)", user_input, re.IGNORECASE)
+                matches = re.findall(r"(?:from|for)\s+(\S+)", user_input, re.IGNORECASE)
                 found_valid = False
                 if matches:
                     for m in matches:
-                        if m.lower() not in ["gmail", "outlook", "mail", "email", "search", "find", "for", "subject"]:
-                            print(f"DEBUG: Overriding sender '{sender}' with regex match '{m}'")
-                            sender = m
+                        m_clean = re.sub(r'[?.,!:]+$', '', m)
+                        if m_clean.lower() not in ["gmail", "outlook", "mail", "email", "search", "find", "for", "subject"]:
+                            sender = m_clean
                             found_valid = True
                             break
                     
                 if not found_valid:
-                    # If the original was a keyword/missing and fallback failed, we MUST clear it.
-                    print(f"DEBUG: Clearing invalid/untraceable sender '{sender}'")
                     sender = None
                 
             # SANITIZE SUBJECT
             # The AI often puts "search", "gmail", "find" in the subject. We must strip this.
             if subject:
                 # LIST OF KNOWN HALLUCINATIONS FROM EXAMPLES
-                hallucinations = ["ljeto zavala", "ljeto", "zavala"]
+                # Removed "ljeto zavala" etc. as they are valid search terms for this user
+                hallucinations = []
                 invalid_keywords = ["search", "find", "get", "show", "fetch", "email", "mail", "gmail", "outlook", "item", "items", "none", "null"] + hallucinations
                 
                 subject_lower = subject.lower().strip()
@@ -466,8 +475,9 @@ async def process_query(request: Request):
                 
                 # FINAL VALIDATION: If subject was extracted by AI but is NOT in the user input (unquoted or quoted)
                 # clear it to prevent hallucinations.
+                print(f"DEBUG: Before final validation, subject='{subject}'")
                 if subject and subject.lower() not in user_input.lower():
-                    print(f"DEBUG: Clearing subject '{subject}' because it is NOT present in user input.")
+                    print(f"DEBUG: Clearing subject '{subject}' because it is NOT present in user input '{user_input}'")
                     subject = None
                 
             # REGEX FALLBACK for Date

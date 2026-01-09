@@ -101,3 +101,4 @@ zipp==3.23.0
 chromadb
 google-genai
 pypdf
+unidecode

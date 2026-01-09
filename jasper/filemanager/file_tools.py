@@ -96,11 +96,7 @@ def find_files(query=None, name=None, date_from=None, date_to=None, limit=10, ki
         if query and (not results or len(query) <= 3):
             # Paths to search recursively (1-2 levels)
             potential_roots = [
-                f"C:\\Users\\{USER_NAME}\\ML",
-                f"C:\\Users\\{USER_NAME}\\WORKING",
-                f"C:\\Users\\{USER_NAME}\\repos",
-                f"C:\\Users\\{USER_NAME}\\Documents",
-                f"C:\\Users\\{USER_NAME}\\Downloads",
+                os.path.expanduser("~"),
                 os.getcwd()
             ]
             
