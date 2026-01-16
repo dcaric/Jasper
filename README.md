@@ -64,16 +64,13 @@ Quick start:
 
 Jasper prioritizes security by separating secrets from configuration:
 
-### 1. Secrets (.env)
-Copy `.env.example` to `.env`. This is where you store:
-- `GEMINI_API_KEY` (Get one at [Google AI Studio](https://aistudio.google.com/))
-- `GMAIL_PASS` (Google App Password)
-- `OUTLOOK_PASS` (If using IMAP mode)
-
-### 2. General Settings (constants.json)
-Use `constants.json` for non-sensitive tweaks:
-- `"PROVIDER"`: `"GMAIL"` or `"OUTLOOK"`
-- `"USER_NAME"`: Your Windows profile name.
+### Configuration (.env)
+Copy `.env.example` to `.env`. This is where you store both secrets and general settings:
+- `GEMINI_API_KEY`: Get one at [Google AI Studio](https://aistudio.google.com/)
+- `GMAIL_PASS`: Google App Password
+- `PROVIDER`: `GMAIL` or `OUTLOOK`
+- `USER_NAME`: Your Windows profile name.
+- `INDEX_PATHS`: Comma-separated list of directories to index.
 
 ---
 

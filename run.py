@@ -3,7 +3,10 @@ import os
 import shutil
 import subprocess
 import hashlib
+import threading
+import time
 from pathlib import Path
+from datetime import datetime
 
 # Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent
@@ -186,6 +189,24 @@ def bootstrap():
 
     print("--- Bootstrap Complete ---\n")
 
+def background_indexer():
+    """Periodically refreshes the semantic index every 4 hours."""
+    print("[BACKGROUND] Background Indexer started.")
+    # Wait a bit after startup to avoid collision with initial bootstrap
+    time.sleep(60)
+    
+    while True:
+        try:
+            from jasper.utility.indexer import index_all
+            print(f"[{datetime.now()}] [BACKGROUND] Starting periodic index refresh...")
+            index_all()
+            print(f"[{datetime.now()}] [BACKGROUND] Index refresh complete.")
+        except Exception as e:
+            print(f"[BACKGROUND] Error in periodic sync: {e}")
+        
+        # Sleep for 4 hours
+        time.sleep(4 * 3600)
+
 if __name__ == "__main__":
     import uvicorn
     import time
@@ -198,6 +219,11 @@ if __name__ == "__main__":
             
             # SECOND: Run the functional bootstrap (models, index, config)
             bootstrap()
+            
+            # START BACKGROUND SYNC (only once)
+            if not any(t.name == "JasperIndexer" for t in threading.enumerate()):
+                sync_thread = threading.Thread(target=background_indexer, name="JasperIndexer", daemon=True)
+                sync_thread.start()
             
             # THIRD: Start the server
             print("[SERVER] Starting Jasper on http://localhost:8000")

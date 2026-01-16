@@ -24,15 +24,13 @@ Jasper V1.1 features a **Smart Bootstrapper** that handles the environment, conf
 ## 3. Configuration (Optional Tweaks)
 While Jasper bootstraps automatically, you may want to customize your setup:
 
-### Secrets (.env)
+### Configuration (.env)
 Edit the newly created `.env` file to add:
 - `GEMINI_API_KEY`: Get one at [Google AI Studio](https://aistudio.google.com/).
 - `GMAIL_PASS`: Your Google App Password.
-
-### Settings (constants.json)
-Edit `constants.json` for:
-- `"PROVIDER"`: Change between `"GMAIL"` and `"OUTLOOK"`.
-- `"USER_NAME"`: Your Windows profile name for file path resolution.
+- `PROVIDER`: Change between `"GMAIL"` and `"OUTLOOK"`.
+- `USER_NAME`: Your Windows profile name for file path resolution.
+- `INDEX_PATHS`: Comma-separated list of directories to index.
 
 ## 4. Automation & Background Service
 To ensure Jasper stays updated and runs in the background:

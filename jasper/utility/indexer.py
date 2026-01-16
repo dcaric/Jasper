@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import datetime
 import argparse
-from .config import get_db_path, get_status_file
+from .config import get_db_path, get_status_file, get_index_paths
 
 # CONFIGURATION
 DB_PATH = get_db_path()
@@ -167,12 +167,19 @@ def index_all(force=False):
     ]
     
     all_files = []
-    workspace = os.getcwd()
-    for root, dirs, files in os.walk(workspace):
-        dirs[:] = [d for d in dirs if d not in skip_folders and not d.startswith('.')]
-        for file in files:
-            if file.endswith(('.txt', '.md', '.py', '.bat', '.html', '.js', '.css', '.json')) or file == 'Modelfile':
-                all_files.append(os.path.join(root, file))
+    index_roots = get_index_paths()
+    print(f"Indexing paths: {index_roots}")
+    
+    for workspace in index_roots:
+        if not os.path.exists(workspace):
+            print(f"Warning: Index path does not exist: {workspace}")
+            continue
+            
+        for root, dirs, files in os.walk(workspace):
+            dirs[:] = [d for d in dirs if d not in skip_folders and not d.startswith('.')]
+            for file in files:
+                if file.endswith(('.txt', '.md', '.py', '.bat', '.html', '.js', '.css', '.json')) or file == 'Modelfile':
+                    all_files.append(os.path.join(root, file))
 
     total = len(all_files)
     print(f"Found {total} files to index")

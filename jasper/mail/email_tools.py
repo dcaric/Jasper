@@ -79,7 +79,7 @@ def search_emails(criteria_parts, limit=5, provider="GMAIL", headers_only=False,
     email_user, email_pass = get_credentials(provider=provider)
     
     if not email_user or not email_pass or "your-email" in email_user:
-        return f"Error: Please set {provider}_USER and {provider}_PASS in constants.json."
+        return f"Error: Please set {provider}_USER and {provider}_PASS in .env."
         
     mail = connect_imap(email_user, email_pass, provider=provider)
     if isinstance(mail, str):

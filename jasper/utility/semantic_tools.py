@@ -32,7 +32,7 @@ def search_semantic(query, limit=5, folder=None):
 
         results = collection.query(
             query_texts=[query],
-            n_results=limit * 4, # Fetch more to allow for file-level deduplication
+            n_results=limit * 10, # Fetch significantly more to allow for file-level deduplication
             where=where_filter
         )
         

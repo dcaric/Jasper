@@ -216,6 +216,9 @@ async def process_query(request: Request):
             params = data.get("params", {})
             should_summarize = params.get("summarize", False)
             
+            with open(get_log_file(), "a") as f:
+                f.write(f"[{datetime.now()}] DEBUG: Parsed AI Intent='{intent}', params={params}\n")
+            
             # DETERMINISTIC SUMMARIZATION GUARD (Safety Net)
             # If the model is over-eager, we check if the user actually asked for it
             summarize_keywords = ['summarize', 'summary', 'overview', 'briefly', 'explain', 'sažmi', 'pregled']
@@ -233,20 +236,33 @@ async def process_query(request: Request):
             chat_keywords = ['weather', 'stock', 'price', 'news', 'who is', 'what is', 'joke', 'tell me', 'market']
             
             # Content Search Guard: Force semantic search if explicit content keywords are used
-            content_keywords = ['search for content', 'find in file', 'search inside', 'find file containing']
+            # We use a regex for more flexibility (e.g. "search for the content")
+            import re
+            content_patterns = [
+                r'search\s+(?:for\s+)?(?:the\s+)?content',
+                r'find\s+in\s+files?',
+                r'search\s+inside',
+                r'find\s+file\s+containing',
+                r'what\s+is\s+inside',
+                r'what\s+does\s+the\s+file\s+say\s+about'
+            ]
             
-            # Check for content keywords first
-            is_content_request = any(k in low_input for k in content_keywords)
+            is_content_request = any(re.search(p, low_input) for p in content_patterns)
             
             if is_content_request:
                 intent = "semantic"
-                # Extract query: everything after the keyword
-                for k in content_keywords:
-                    if k in low_input:
-                        query_part = low_input.split(k)[-1].strip().strip("'").strip('"')
+                # Extract query: everything after the keyword match
+                for p in content_patterns:
+                    match = re.search(p, low_input)
+                    if match:
+                        query_part = low_input[match.end():].strip().strip("'").strip('"')
+                        # Remove "of" or "about" if it's the first word after the match
+                        query_part = re.sub(r'^(?:of|about|for)\s+', '', query_part, flags=re.IGNORECASE).strip()
                         params = {"query": query_part}
                         break
                 print(f"DEBUG: Content Search Shield triggered for: {low_input}")
+                with open(get_log_file(), "a") as f:
+                    f.write(f"[{datetime.now()}] DEBUG: Content Search Shield Triggered! is_content_request={is_content_request}, new_intent='{intent}', new_params={params}\n")
             
             # GLOBAL CHAT GUARD: Force chat for known external topics
             # This prevents "check weather" from becoming "search email"
