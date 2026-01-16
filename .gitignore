@@ -26,8 +26,8 @@ ENV/
 
 # Project Specific
 .env
-constants.json
 *.log
+inbox_dump.txt
 .index_status
 startup/run_indexer.bat
 debug/
