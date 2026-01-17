@@ -60,6 +60,7 @@ Quick start:
 1. Clone the repo.
 2. Run `python run.py`.
    - *Jasper will automatically create a virtual environment, install dependencies, pull missing models, and build your initial index.*
+   - **Tip**: Add `--background` (or `-b`) to run Jasper in the background and release the terminal immediately.
 3. Run `startup/setup_automation.bat` as Administrator to enable recurring indexing.
 
 Jasper prioritizes security by separating secrets from configuration:
@@ -94,7 +95,8 @@ python -m jasper.utility.indexer build    # Rebuild from scratch
 - [ ] **Linux (Planned)**: IMAP-first mode, Grep-based local fallback.
 
 ## Usage
-- **Start Jasper**: Run `startup/run_web.ps1`.
+- **Start Jasper**: Run `startup/run_web.ps1` or `python run.py`.
+- **Background Mode**: Run `python run.py --background` to detach the process and release the terminal. Logs will be written to `jasper.log`.
 - **Open Dashboard**: Go to [http://localhost:8000](http://localhost:8000).
 - **Auto-Startup**: Set Jasper to start at login by running this in an Administrator PowerShell window:
   ```powershell

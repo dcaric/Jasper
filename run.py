@@ -5,6 +5,7 @@ import subprocess
 import hashlib
 import threading
 import time
+import argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -13,6 +14,38 @@ BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR))
 
 VENV_DIR = BASE_DIR / "venv"
+
+def start_background():
+    """Restarts the script in a detached background process."""
+    if os.name != 'nt':
+        print("[ERROR] Background mode is currently only optimized for Windows.")
+        sys.exit(1)
+
+    python_exe = sys.executable
+    script_path = __file__
+    
+    # Forward all arguments except --background
+    args = [a for a in sys.argv if a not in ["-b", "--background"]]
+    
+    print(f"[BOOTSTRAP] Starting Jasper in background...")
+    print(f"[BOOTSTRAP] Logs will be written to {BASE_DIR / 'jasper.log'}")
+    
+    # On Windows, use DETACHED_PROCESS to release the terminal
+    DETACHED_PROCESS = 0x00000008
+    
+    with open(BASE_DIR / "jasper.log", "a") as log_file:
+        log_file.write(f"\n--- Jasper Started Background at {datetime.now()} ---\n")
+        subprocess.Popen(
+            [python_exe] + args,
+            stdout=log_file,
+            stderr=log_file,
+            creationflags=DETACHED_PROCESS,
+            close_fds=True,
+            cwd=str(BASE_DIR)
+        )
+    
+    print("[BOOTSTRAP] Jasper process detached. You can close this terminal.")
+    sys.exit(0)
 
 def is_venv():
     """Checks if the script is currently running inside a virtual environment."""
@@ -209,8 +242,14 @@ def background_indexer():
 
 if __name__ == "__main__":
     import uvicorn
-    import time
     
+    parser = argparse.ArgumentParser(description="Jasper Smart Bootstrap & Server")
+    parser.add_argument("-b", "--background", action="store_true", help="Run Jasper in the background (detached)")
+    args, unknown = parser.parse_known_args()
+    
+    if args.background:
+        start_background()
+
     # supervisor loop
     while True:
         try:

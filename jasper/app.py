@@ -147,6 +147,10 @@ async def read_index():
     with open(os.path.join(static_path, "index.html"), "r") as f:
         return f.read()
 
+@app.get("/.well-known/appspecific/com.chrome.devtools.json")
+async def chrome_devtools_json():
+    return {}
+
 @app.post("/query")
 async def process_query(request: Request):
     body = await request.json()
