@@ -173,9 +173,9 @@ async def process_query(request: Request):
                     model=MODEL_NAME,
                     prompt=f"User: \"{user_input}\"", 
                     format="json",
-                    options={ "temperature": 0.0, "stop": ["\n", "User:"] }
+                    options={ "temperature": 0.0, "stop": ["\n", "User:"], "num_predict": 256 }
                 )),
-                timeout=20.0 # 20 seconds timeout for AI
+                timeout=60.0 # Increased timeout for 4B model
             )
             raw_content = response.get("response", "").strip()
         except asyncio.TimeoutError:

@@ -1,5 +1,5 @@
-FROM functiongemma:270m
-# FROM gemma3:4b
+# FROM functiongemma:270m
+FROM gemma3:4b
 
 
 SYSTEM """
@@ -15,6 +15,7 @@ CRITICAL:
 1. Preserve exact spelling for names and file queries. Do not autocorrect!
 2. Only set "summarize": true if the user explicitly asks to "summarize", "overview", or "briefly explain". 
 3. If the user just says "find", "search", or "get", set "summarize": false.
+4. DO NOT offer help, do not ask clarifying questions, and DO NOT suggest web searches. Output ONLY JSON.
 
 EXAMPLES:
 Input: search for file marketing_report_2024 and summarize

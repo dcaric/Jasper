@@ -205,6 +205,18 @@ def bootstrap():
         print(f"[WARNING] Could not verify Ollama models: {e}")
         print("Please ensure Ollama is installed and running.")
 
+    # 2.5 Warm up models (Loads them into memory)
+    print("[BOOTSTRAP] Step 2.5: Warming up AI models (Loading into memory)...")
+    try:
+        import ollama
+        for model in ["jasper", "gemma3"]:
+            print(f"[BOOTSTRAP] Warming up '{model}'...")
+            # Low token budget test call
+            ollama.generate(model=model, prompt="hi", options={"num_predict": 5})
+        print("[BOOTSTRAP] Models warmed and ready.")
+    except Exception as e:
+        print(f"[WARNING] Model warming failed: {e}")
+
     # 3. Ensure Semantic Index exists
     print("[BOOTSTRAP] Step 3: Verifying semantic index (ChromaDB)...")
     db_path = BASE_DIR / "chroma_db"
