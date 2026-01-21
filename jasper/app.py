@@ -798,7 +798,8 @@ async def get_logs():
         if not os.path.exists(log_file):
             return {"logs": []}
             
-        with open(log_file, "r", encoding="utf-8") as f:
+        # Use errors="replace" to avoid crashing on non-UTF8 characters
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
             # Return last 100 lines, reversed (newest first)
             last_lines = lines[-100:]

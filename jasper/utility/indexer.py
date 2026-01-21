@@ -18,11 +18,38 @@ CHUNK_OVERLAP = 100
 embedding_func = embedding_functions.DefaultEmbeddingFunction()
 
 # INITIALIZE CHROMA
-client = chromadb.PersistentClient(path=DB_PATH)
-collection = client.get_or_create_collection(
-    name=COLLECTION_NAME, 
-    embedding_function=embedding_func
-)
+try:
+    client = chromadb.PersistentClient(path=DB_PATH)
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME, 
+        embedding_function=embedding_func
+    )
+except Exception as e:
+    print(f"[CRITICAL] Failed to initialize ChromaDB: {e}")
+    if "hnsw" in str(e).lower() or "index" in str(e).lower():
+        print("[REPAIR] Index corruption detected. Attempting automatic repair...")
+        # We can't easily repair in-place here without potentially breaking other imports
+        # But we can define how to handle it in main() or via CLI
+    client = None
+    collection = None
+
+def get_collection():
+    """Safety wrapper to ensure collection is available."""
+    global collection, client
+    if collection is not None:
+        return collection
+    
+    try:
+        client = chromadb.PersistentClient(path=DB_PATH)
+        collection = client.get_or_create_collection(
+            name=COLLECTION_NAME, 
+            embedding_function=embedding_func
+        )
+        return collection
+    except Exception as e:
+        print(f"Error re-acquiring collection: {e}")
+        return None
+
 
 def get_file_hash(path):
     """Generate a hash for a file to check for content changes."""
@@ -76,7 +103,12 @@ def index_file(file_path):
         if not content.strip(): return
 
         # Delete old chunks
-        collection.delete(where={"source": str(path_obj.absolute())})
+        coll = get_collection()
+        if coll:
+            coll.delete(where={"source": str(path_obj.absolute())})
+        else:
+            print(f"Skipping {file_path} - Collection not available")
+            return
         
         # Chunk and Add
         chunks = chunk_text(content)
@@ -90,7 +122,7 @@ def index_file(file_path):
             "hash": f_hash
         } for _ in range(len(chunks))]
         
-        collection.add(
+        coll.add(
             ids=ids,
             documents=chunks,
             metadatas=metadatas
@@ -116,7 +148,10 @@ def update_status(progress_pct, status_text):
 def prune_index():
     """Removes entries from the index if the source file no longer exists."""
     print("Pruning stale entries from index...")
-    results = collection.get()
+    coll = get_collection()
+    if not coll: return
+    
+    results = coll.get()
     if not results or not results['metadatas']:
         print("Index is empty.")
         return
@@ -133,19 +168,26 @@ def prune_index():
 
     if to_delete:
         print(f"Removing {len(to_delete)} stale files from index.")
+        coll = get_collection()
         for source in to_delete:
-            collection.delete(where={"source": source})
+            if coll:
+                coll.delete(where={"source": source})
             print(f"Deleted: {source}")
     else:
         print("No stale entries found.")
 
 def show_status():
     """Displays stats about the current index."""
-    count = collection.count()
+    coll = get_collection()
+    if not coll:
+        print("Index currently unavailable.")
+        return
+        
+    count = coll.count()
     print(f"--- Jasper Index Status ---")
     print(f"Total Chunks: {count}")
     
-    results = collection.get()
+    results = coll.get()
     if results and results['metadatas']:
         unique_files = len(set(m.get('source') for m in results['metadatas']))
         print(f"Unique Files: {unique_files}")
@@ -192,16 +234,40 @@ def index_all(force=False):
     update_status(100, "Idle")
     print("Indexing complete.")
 
+def repair_index():
+    """Destroys and recreates the index directory to fix corruption."""
+    import shutil
+    print(f"[REPAIR] Deleting corrupted index at {DB_PATH}...")
+    try:
+        if os.path.exists(DB_PATH):
+            shutil.rmtree(DB_PATH)
+        print("[REPAIR] Index deleted. Rebuilding...")
+        # Force re-index
+        global collection, client
+        client = chromadb.PersistentClient(path=DB_PATH)
+        collection = client.create_collection(
+            name=COLLECTION_NAME, 
+            embedding_function=embedding_func
+        )
+        index_all()
+        print("[REPAIR] Index successfully rebuilt.")
+    except Exception as e:
+        print(f"[ERROR] Failed to repair index: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="Jasper Semantic Indexer CLI")
-    parser.add_argument("command", choices=["build", "refresh", "status", "prune"], help="Command to run")
+    parser.add_argument("command", choices=["build", "refresh", "status", "prune", "repair"], help="Command to run")
     parser.add_argument("--force", action="store_true", help="Force re-indexing of all files")
     
     args = parser.parse_args()
+    
+    global collection, client
 
     if args.command == "build":
         print("Building index from scratch...")
-        client.delete_collection(COLLECTION_NAME)
+        coll = get_collection()
+        if coll:
+            client.delete_collection(COLLECTION_NAME)
         collection = client.create_collection(name=COLLECTION_NAME, embedding_function=embedding_func)
         index_all()
     elif args.command == "refresh":
@@ -210,6 +276,8 @@ def main():
         show_status()
     elif args.command == "prune":
         prune_index()
+    elif args.command == "repair":
+        repair_index()
 
 if __name__ == "__main__":
     main()

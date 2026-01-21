@@ -143,91 +143,85 @@ def search_emails(criteria_parts, limit=5, provider="GMAIL", headers_only=False,
             return []
             
         # 2. FETCH DATA FOR THESE IDs
-        # OPTIMIZATION: Batch fetch
-        # Ensure ids are bytes
-        encoded_ids = []
-        for mid in mail_ids:
-            if isinstance(mid, str):
-                encoded_ids.append(mid.encode('ascii'))
-            else:
-                encoded_ids.append(mid)
-                
-        batch_ids = b",".join(encoded_ids)
-        
-        # Determine Fetch Command and Criteria
-        # Ensure we request UID if we are using UIDs, so we can map results back accurately
-        base_criteria = "RFC822.HEADER" if headers_only else "RFC822"
-        fetch_criteria = f"(UID {base_criteria})"
-        
-        print(f"DEBUG: Batch fetching {len(mail_ids)} items using {'UID ' if use_uid else ''}FETCH...")
-        
-        if use_uid:
-             status, msg_data = mail.uid("fetch", batch_ids, fetch_criteria)
-        else:
-             status, msg_data = mail.fetch(batch_ids, fetch_criteria)
-        
-        if status != "OK":
-            mail.logout()
-            # If fetch failed, it might be due to valid UIDs disappearing (deleted logic). Return empty.
-            print(f"DEBUG: Fetch failed (status {status}), possibly due to invalid IDs.")
-            return []
-            
+        # OPTIMIZATION: Chunked fetching to avoid memory allocation failures
+        BATCH_SIZE = 50
         results = []
-        # msg_data is a list of (metadata, content) tuples followed by a closing string
-        # Parsing is trickier with UID included in response
-        for response_part in msg_data:
-            if isinstance(response_part, tuple):
-                # response_part[0] is metadata e.g. b'1234 (UID 9999 RFC822.HEADER {size})'
-                # response_part[1] is content
-                
-                meta = response_part[0].decode(errors="ignore")
-                msg = email.message_from_bytes(response_part[1])
-                
-                # Extract ID (UID or Seq)
-                s_id = "?"
-                if use_uid:
-                    # Parse proper UID from metadata: "123 (UID 5678 ...)"
-                    uid_match = re.search(r"UID\s+(\d+)", meta)
-                    if uid_match:
-                        s_id = uid_match.group(1)
-                    else:
-                        print(f"DEBUG: Warning - Could not parse UID from '{meta}'")
+        
+        for i in range(0, len(mail_ids), BATCH_SIZE):
+            chunk_ids = mail_ids[i:i + BATCH_SIZE]
+            
+            # Ensure ids are bytes
+            encoded_ids = []
+            for mid in chunk_ids:
+                if isinstance(mid, str):
+                    encoded_ids.append(mid.encode('ascii'))
                 else:
-                    # Sequence number is at the start
-                    s_id = meta.split()[0]
+                    encoded_ids.append(mid)
+                    
+            batch_ids = b",".join(encoded_ids)
+            
+            # Determine Fetch Command and Criteria
+            base_criteria = "RFC822.HEADER" if headers_only else "RFC822"
+            fetch_criteria = f"(UID {base_criteria})"
+            
+            print(f"DEBUG: Batch fetching {len(chunk_ids)} items (chunk {i//BATCH_SIZE + 1}) using {'UID ' if use_uid else ''}FETCH...")
+            
+            if use_uid:
+                 status, msg_data = mail.uid("fetch", batch_ids, fetch_criteria)
+            else:
+                 status, msg_data = mail.fetch(batch_ids, fetch_criteria)
+            
+            if status != "OK":
+                print(f"DEBUG: Fetch failed for chunk {i//BATCH_SIZE + 1} (status {status})")
+                continue
                 
-                # Safe Header Decoding
-                subject = decode_mime_header(msg.get("Subject"))
-                sender = decode_mime_header(msg.get("From"))
-                msg_id = msg.get("Message-ID", "").strip("<>")
+            # Parse responses for this chunk
+            for response_part in msg_data:
+                if isinstance(response_part, tuple):
+                    meta = response_part[0].decode(errors="ignore")
+                    msg = email.message_from_bytes(response_part[1])
                     
-                # Extract body snippet (only if not headers_only)
-                body_snippet = ""
-                if not headers_only:
-                    body_content = ""
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                try:
-                                    body_content = part.get_payload(decode=True).decode(errors="ignore")
-                                    break
-                                except: pass
+                    # Extract ID (UID or Seq)
+                    s_id = "?"
+                    if use_uid:
+                        uid_match = re.search(r"UID\s+(\d+)", meta)
+                        if uid_match:
+                            s_id = uid_match.group(1)
+                        else:
+                            print(f"DEBUG: Warning - Could not parse UID from '{meta}'")
                     else:
-                        try:
-                            body_content = msg.get_payload(decode=True).decode(errors="ignore")
-                        except: pass
+                        s_id = meta.split()[0]
                     
-                    # Clean up body snippet
-                    body_snippet = " ".join(body_content.split())[:1000]
-                    
-                results.append({
-                    "id": s_id, # This is now consistently the UID if use_uid=True
-                    "subject": subject,
-                    "sender": sender,
-                    "received": str(msg.get("Date", "Unknown date")),
-                    "message_id": msg_id,
-                    "body": body_snippet
-                })
+                    subject = decode_mime_header(msg.get("Subject"))
+                    sender = decode_mime_header(msg.get("From"))
+                    msg_id = msg.get("Message-ID", "").strip("<>")
+                        
+                    body_snippet = ""
+                    if not headers_only:
+                        body_content = ""
+                        if msg.is_multipart():
+                            for part in msg.walk():
+                                if part.get_content_type() == "text/plain":
+                                    try:
+                                        body_content = part.get_payload(decode=True).decode(errors="ignore")
+                                        break
+                                    except: pass
+                        else:
+                            try:
+                                body_content = msg.get_payload(decode=True).decode(errors="ignore")
+                            except: pass
+                        
+                        body_snippet = " ".join(body_content.split())[:1000]
+                        
+                    results.append({
+                        "id": s_id,
+                        "subject": subject,
+                        "sender": sender,
+                        "received": str(msg.get("Date", "Unknown date")),
+                        "message_id": msg_id,
+                        "body": body_snippet
+                    })
+
         
         # Sort results based on original id order (latest first)
         # Note: mail_ids are bytes, s_id is string
