@@ -144,7 +144,7 @@ def summarize_files_iteratively(files, original_query):
 
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
-    with open(os.path.join(static_path, "index.html"), "r") as f:
+    with open(os.path.join(static_path, "index.html"), "r", encoding="utf-8") as f:
         return f.read()
 
 @app.get("/.well-known/appspecific/com.chrome.devtools.json")
@@ -161,8 +161,8 @@ async def process_query(request: Request):
 
     try:
         # LOGGING
-        with open(get_log_file(), "a") as f:
-            f.write(f"[{datetime.now()}] Input: {user_input}\n")
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [INTENT] Input: {user_input}\n")
         
         # OLLAMA CALL (Using Jasper - built-in system prompt)
         try:
@@ -182,8 +182,8 @@ async def process_query(request: Request):
             print(f"[{datetime.now()}] AI Timeout for input: {user_input}")
             raw_content = "" # Will trigger fallback
             
-        with open(get_log_file(), "a") as f:
-            f.write(f"[{datetime.now()}] AI Response: {raw_content}\n")
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [INTENT] Response: {raw_content}\n")
         print(f"Jasper Logic -> {raw_content}")
 
         try:
@@ -220,8 +220,8 @@ async def process_query(request: Request):
             params = data.get("params", {})
             should_summarize = params.get("summarize", False)
             
-            with open(get_log_file(), "a") as f:
-                f.write(f"[{datetime.now()}] DEBUG: Parsed AI Intent='{intent}', params={params}\n")
+            with open(get_log_file(), "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] [INTENT] DEBUG: Parsed AI Intent='{intent}', params={params}\n")
             
             # DETERMINISTIC SUMMARIZATION GUARD (Safety Net)
             # If the model is over-eager, we check if the user actually asked for it
@@ -237,7 +237,11 @@ async def process_query(request: Request):
             low_input = user_input.lower()
             
             # Chat Keyword Guard
-            chat_keywords = ['weather', 'stock', 'price', 'news', 'who is', 'what is', 'joke', 'tell me', 'market']
+            chat_keywords = [
+                'weather', 'stock', 'price', 'news', 'who is', 'what is', 'joke', 'tell me', 
+                'market', 'online', 'check the web', 'web search', 'nyse', 'nasdaq', 'forecast',
+                'bitcoin', 'crypto', 'how to', 'who was'
+            ]
             
             # Content Search Guard: Force semantic search if explicit content keywords are used
             # We use a regex for more flexibility (e.g. "search for the content")
@@ -265,8 +269,8 @@ async def process_query(request: Request):
                         params = {"query": query_part}
                         break
                 print(f"DEBUG: Content Search Shield triggered for: {low_input}")
-                with open(get_log_file(), "a") as f:
-                    f.write(f"[{datetime.now()}] DEBUG: Content Search Shield Triggered! is_content_request={is_content_request}, new_intent='{intent}', new_params={params}\n")
+                with open(get_log_file(), "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now()}] [INTENT] DEBUG: Content Search Shield Triggered! is_content_request={is_content_request}, new_intent='{intent}', new_params={params}\n")
             
             # GLOBAL CHAT GUARD: Force chat for known external topics
             # This prevents "check weather" from becoming "search email"
@@ -633,8 +637,8 @@ async def process_query(request: Request):
             # For now, we trust the model's extraction of 'body' vs 'subject'.
             
             # LOGGING PARAMETERS
-            with open(get_log_file(), "a") as f:
-                f.write(f"[{datetime.now()}] Final Params: provider={final_provider}, sender={sender}, subject={subject}, body={body_text}, date_filter={date_filter}, has_attachment={has_attachment}, from={date_from}, to={date_to}\n")
+            with open(get_log_file(), "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] [INTENT] Final Params: provider={final_provider}, sender={sender}, subject={subject}, body={body_text}, date_filter={date_filter}, has_attachment={has_attachment}, from={date_from}, to={date_to}\n")
                 
             print(f"DEBUG: Executing find_items(provider='{final_provider}', sender='{sender}', subject='{subject}', body='{body_text}', limit={limit}, from='{date_from}', to='{date_to}')")
                 
@@ -736,7 +740,7 @@ async def process_query(request: Request):
     except Exception as e:
         error_trace = traceback.format_exc()
         print(f"Backend Error: {error_trace}")
-        with open(get_log_file(), "a") as f:
+        with open(get_log_file(), "a", encoding="utf-8") as f:
             f.write(f"[{datetime.now()}] Backend Error: {error_trace}\n")
         return JSONResponse(content={"type": "error", "content": f"Backend Error: {str(e)}", "trace": error_trace}, status_code=500)
 
@@ -783,6 +787,23 @@ async def restart_service():
             
         threading.Thread(target=kill_self).start()
         return {"status": "ok", "message": "Restarting Jasper..."}
+    except Exception as e:
+        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
+
+@app.get("/api/logs")
+async def get_logs():
+    """Returns the last 100 lines of the debug log."""
+    try:
+        log_file = get_log_file()
+        if not os.path.exists(log_file):
+            return {"logs": []}
+            
+        with open(log_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            # Return last 100 lines, reversed (newest first)
+            last_lines = lines[-100:]
+            last_lines.reverse()
+            return {"logs": [line.strip() for line in last_lines if line.strip()]}
     except Exception as e:
         return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
 

@@ -1,6 +1,7 @@
 import ollama
 import traceback
-from .utility.config import get_setting
+from datetime import datetime
+from .utility.config import get_setting, get_log_file
 
 def chat_with_gemma(prompt, allow_fallback=True):
     """
@@ -8,12 +9,18 @@ def chat_with_gemma(prompt, allow_fallback=True):
     and returns the text response.
     """
     try:
+        log_msg = f"[{datetime.now()}] [CHAT] Input: {prompt}\n"
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(log_msg)
         print(f"DEBUG: asking gemma3 (Jasper) -> '{prompt}'")
         response = ollama.chat(model='gemma3', messages=[
             {'role': 'user', 'content': prompt},
         ])
         raw_content = response['message']['content']
         
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [CHAT] Response: {raw_content}\n")
+
         # Check for Fallback Signal FIRST (on raw content)
         if allow_fallback:
             import json
@@ -32,6 +39,9 @@ def chat_with_gemma(prompt, allow_fallback=True):
 
                 if isinstance(data, dict) and data.get("action") == "google_search":
                     query = data.get("query")
+                    log_msg = f"[{datetime.now()}] [CHAT] Fallback Triggered -> Query: {query}\n"
+                    with open(get_log_file(), "a", encoding="utf-8") as f:
+                        f.write(log_msg)
                     print(f"DEBUG: Cloud Fallback Triggered -> Query: {query}")
                     return call_gemini_cloud(query)
             except Exception as e:
@@ -72,7 +82,10 @@ def call_gemini_cloud(query):
         )
         
         # Extract text from response (which includes grounding)
-        return response.text
+        text_resp = response.text
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [GEMINI] Response: {text_resp}\n")
+        return text_resp
         
     except Exception as e:
         traceback.print_exc()

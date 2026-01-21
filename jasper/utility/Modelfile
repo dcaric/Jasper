@@ -17,38 +17,44 @@ CRITICAL:
 3. If the user just says "find", "search", or "get", set "summarize": false.
 
 EXAMPLES:
-Input: search for file Projekt_ASBP_2024_EN and summarize
-{"intent": "files", "params": {"query": "Projekt_ASBP_2024_EN", "summarize": true}}
+Input: search for file marketing_report_2024 and summarize
+{"intent": "files", "params": {"query": "marketing_report_2024", "summarize": true}}
 
-Input: search for file Projekt_ASBP_2024_EN
-{"intent": "files", "params": {"query": "Projekt_ASBP_2024_EN", "summarize": false}}
+Input: search for file project_roadmap
+{"intent": "files", "params": {"query": "project_roadmap", "summarize": false}}
 
-Input: find file Projekt_IPA
-{"intent": "files", "params": {"query": "Projekt_IPA", "summarize": false}}
+Input: find file budget_plan
+{"intent": "files", "params": {"query": "budget_plan", "summarize": false}}
 
-Input: find and summarize files about 'budget'
-{"intent": "files", "params": {"query": "budget", "summarize": true}}
+Input: find and summarize files about 'strategy'
+{"intent": "files", "params": {"query": "strategy", "summarize": true}}
 
-Input: summarize gmail from sonja last 3 days
-{"intent": "mail", "params": {"sender": "sonja", "provider": "GMAIL", "date_filter": "last 3 days", "summarize": true}}
+Input: summarize gmail from John past 3 days
+{"intent": "mail", "params": {"sender": "John", "provider": "GMAIL", "date_filter": "last 3 days", "summarize": true}}
 
-Input: find emails from Ivan
-{"intent": "mail", "params": {"sender": "Ivan", "provider": "OUTLOOK", "summarize": false}}
+Input: find emails from Sarah
+{"intent": "mail", "params": {"sender": "Sarah", "provider": "OUTLOOK", "summarize": false}}
 
-Input: search gmail for subject 'ljeto zavala' last 40 days
-{"intent": "mail", "params": {"provider": "GMAIL", "subject": "ljeto zavala", "date_filter": "last 40 days", "summarize": false}}
+Input: search gmail for subject 'monthly invoice' last 40 days
+{"intent": "mail", "params": {"provider": "GMAIL", "subject": "monthly invoice", "date_filter": "last 40 days", "summarize": false}}
 
-Input: find mail from zvone
-{"intent": "mail", "params": {"sender": "zvone", "provider": "OUTLOOK", "summarize": false}}
+Input: find mail from support
+{"intent": "mail", "params": {"sender": "support", "provider": "OUTLOOK", "summarize": false}}
 
-Input: find file ModelfileMeveric
-{"intent": "files", "params": {"query": "ModelfileMeveric", "summarize": false}}
+Input: find file notes_v1
+{"intent": "files", "params": {"query": "notes_v1", "summarize": false}}
 
-Input: find "Maverick" in the logs folder and summarize
-{"intent": "semantic", "params": {"query": "Maverick", "folder": "logs", "summarize": true}}
+Input: find "quarterly results" in the reports folder and summarize
+{"intent": "semantic", "params": {"query": "quarterly results", "folder": "reports", "summarize": true}}
 
-Input: what is in the Jasper folder?
-{"intent": "semantic", "params": {"query": "what is in the Jasper folder", "folder": "Jasper", "summarize": false}}
+Input: what is in the documents folder?
+{"intent": "semantic", "params": {"query": "what is in the documents folder", "folder": "documents", "summarize": false}}
+
+Input: check online stock price for AAPL
+{"intent": "chat", "params": {"message": "check online stock price for AAPL"}}
+
+Input: check the weather in London online
+{"intent": "chat", "params": {"message": "check the weather in London online"}}
 
 Input: hi
 {"intent": "chat", "params": {"message": "hi"}}

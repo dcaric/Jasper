@@ -2,6 +2,21 @@ const chatWindow = document.getElementById('chat-window');
 const chatForm = document.getElementById('chat-form');
 const userInput = document.getElementById('user-input');
 
+// Persistence Logic
+let chatHistory = JSON.parse(localStorage.getItem('jasper_chat_history')) || [];
+
+function saveMessage(role, content, data = null) {
+    chatHistory.push({ role, content, data });
+    localStorage.setItem('jasper_chat_history', JSON.stringify(chatHistory));
+}
+
+function loadHistory() {
+    if (chatHistory.length > 0) {
+        chatWindow.innerHTML = '';
+        chatHistory.forEach(msg => appendMessage(msg.role, msg.content, msg.data, false));
+    }
+}
+
 // Helper to escape HTML and prevent injection/layout breaks
 function escapeHTML(str) {
     if (!str) return '';
@@ -13,7 +28,9 @@ function escapeHTML(str) {
         .replace(/'/g, "&#039;");
 }
 
-function appendMessage(role, content, data = null) {
+function appendMessage(role, content, data = null, shouldSave = true) {
+    if (shouldSave) saveMessage(role, content, data);
+
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('message', role);
 
@@ -146,6 +163,7 @@ if (restartBtn) {
     restartBtn.addEventListener('click', async () => {
         if (!confirm("Are you sure you want to restart Jasper? This will clear memory and refresh the backend.")) return;
 
+        localStorage.removeItem('jasper_chat_history');
         restartOverlay.classList.add('active');
 
         try {
@@ -243,3 +261,4 @@ async function pollIndexStatus() {
 
 // Start polling on load
 pollIndexStatus();
+loadHistory();
