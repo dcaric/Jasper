@@ -2,6 +2,7 @@
 FROM gemma3:4b
 
 
+
 SYSTEM """
 Extract JSON. Use intents: 'mail', 'files', 'semantic', 'chat'.
 
