@@ -12,8 +12,11 @@ def chat_with_gemma(prompt, allow_fallback=True):
         log_msg = f"[{datetime.now()}] [CHAT] Input: {prompt}\n"
         with open(get_log_file(), "a", encoding="utf-8") as f:
             f.write(log_msg)
-        print(f"DEBUG: asking gemma3 (Jasper) -> '{prompt}'")
-        response = ollama.chat(model='gemma3', messages=[
+        # Get model from settings (consistent with app.py)
+        model_name = get_setting("MODEL_NAME", "jasper")
+        print(f"DEBUG: asking {model_name} (Jasper) -> '{prompt}'")
+        
+        response = ollama.chat(model=model_name, messages=[
             {'role': 'user', 'content': prompt},
         ])
         raw_content = response['message']['content']

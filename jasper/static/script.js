@@ -224,6 +224,35 @@ async function openFileItem(path) {
     }
 }
 
+// Refresh Index Logic
+const refreshIndexBtn = document.getElementById('refresh-index-btn');
+if (refreshIndexBtn) {
+    refreshIndexBtn.addEventListener('click', async () => {
+        if (!confirm("This will scan all your project files and update the semantic search index. This may take a minute. Proceed?")) return;
+
+        refreshIndexBtn.disabled = true;
+        refreshIndexBtn.style.opacity = "0.5";
+
+        try {
+            const resp = await fetch('/refresh-index', { method: 'POST' });
+            if (resp.ok) {
+                // Trigger immediate poll update
+                pollIndexStatus();
+            } else {
+                alert("Failed to start indexing.");
+            }
+        } catch (e) {
+            console.error("Refresh index failed", e);
+        } finally {
+            // Re-enable after 5 seconds to prevent spam
+            setTimeout(() => {
+                refreshIndexBtn.disabled = false;
+                refreshIndexBtn.style.opacity = "1";
+            }, 5000);
+        }
+    });
+}
+
 // Index Status Polling
 async function pollIndexStatus() {
     try {

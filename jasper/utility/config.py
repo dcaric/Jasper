@@ -26,6 +26,9 @@ def get_setting(name, default=None):
     Retrieves a setting with the highest priority:
     Environment Variable (highest) -> Default value (lowest)
     """
+    # Force RELOAD of .env to pick up manual changes without restart
+    load_dotenv(BASE_DIR / ".env", override=True)
+    
     # Check ENV
     val = os.getenv(name)
     

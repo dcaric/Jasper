@@ -17,69 +17,80 @@ def find_files(query=None, name=None, date_from=None, date_to=None, limit=10, ki
              f.write(f"[{datetime.now()}] find_files EXECUTION -> kind='{kind}', content_mode={content_mode}\n")
 
         conn = win32com.client.Dispatch("ADODB.Connection")
-        conn.Open("Provider=Search.CollatorDSO;Extended Properties='Application=Windows';")
-        
-        rs = win32com.client.Dispatch("ADODB.Recordset")
-        
-        # Build SQL
-        select_clause = "SELECT System.ItemName, System.ItemPathDisplay, System.DateModified, System.Size, System.FileExtension, System.Kind"
-        from_clause = "FROM SystemIndex"
-        where_parts = ["SCOPE='file:'"]
-        
-        if query:
-            if content_mode:
-                # Use FREETEXT for content search which is smarter for natural language matches
-                where_parts.append(f"FREETEXT(System.Search.Contents, '{query}')")
-            else:
-                where_parts.append(f"(System.ItemName LIKE '%{query}%' OR System.ItemPathDisplay LIKE '%{query}%')")
-        
-        if name:
-            where_parts.append(f"System.ItemName LIKE '%{name}%'")
-            
-        if kind:
-            # System.Kind can be 'folder', 'document', 'picture', etc.
-            # Windows Search Syntax: System.Kind = 'folder'
-            if kind.lower() in ['folder', 'directory']:
-                 # System.ItemType = 'Directory' is often more reliable than Kind
-                 where_parts.append("(System.Kind = 'folder' OR System.ItemType = 'Directory')")
-            else:
-                 where_parts.append(f"System.Kind LIKE '%{kind}%'")
-            
-        if date_from:
-            formatted_from = date_from.strftime("%Y-%m-%d %H:%M:%S")
-            where_parts.append(f"System.DateModified >= '{formatted_from}'")
-            
-        if date_to:
-            formatted_to = date_to.strftime("%Y-%m-%d 23:59:59")
-            where_parts.append(f"System.DateModified <= '{formatted_to}'")
-            
-        where_clause = "WHERE " + " AND ".join(where_parts)
-        order_clause = "ORDER BY System.DateModified DESC"
-        
-        sql = f"{select_clause} {from_clause} {where_clause} {order_clause}"
-        
-        print(f"DEBUG: find_files called with kind='{kind}'")
-        print(f"DEBUG: File Search SQL -> {sql}")
-        rs.Open(sql, conn)
-        
+        conn.ConnectionTimeout = 10
+        conn.CommandTimeout = 10
+        try:
+            conn.Open("Provider=Search.CollatorDSO;Extended Properties='Application=Windows';")
+        except:
+            # If search provider is entirely unavailable, we'll rely on local walk
+            pass
+
         results = []
-        count = 0
-        if not rs.EOF:
-            rs.MoveFirst()
-            while not rs.EOF and count < limit:
-                results.append({
-                    "name": rs.Fields("System.ItemName").Value,
-                    "path": rs.Fields("System.ItemPathDisplay").Value,
-                    "date": str(rs.Fields("System.DateModified").Value),
-                    "size": rs.Fields("System.Size").Value,
-                    "extension": rs.Fields("System.FileExtension").Value,
-                    "kind": rs.Fields("System.Kind").Value
-                })
-                count += 1
-                rs.MoveNext()
+        if conn.State == 1: # adStateOpen
+            try:
+                # Build Primary SQL
+                select_clause = "SELECT System.ItemName, System.ItemPathDisplay, System.DateModified, System.FileExtension, System.Kind"
+                from_clause = "FROM SystemIndex"
+                where_parts = ["SCOPE='file:'"] # 'file:' is standard for the local index
+                
+                # SANITIZE: Escape single quotes
+                q_sql = query.replace("'", "''") if query else ""
+                
+                if q_sql:
+                    if kind and kind.lower() in ['folder', 'directory']:
+                        where_parts.append(f"System.ItemName LIKE '%{q_sql}%'")
+                    elif content_mode:
+                        where_parts.append(f"FREETEXT(System.Search.Contents, '{q_sql}')")
+                    else:
+                        where_parts.append(f"(System.ItemName LIKE '%{q_sql}%' OR System.ItemPathDisplay LIKE '%{q_sql}%')")
+                
+                if name:
+                    n_sql = name.replace("'", "''")
+                    where_parts.append(f"System.ItemName LIKE '%{n_sql}%'")
+                    
+                if kind:
+                    if kind.lower() in ['folder', 'directory']:
+                         where_parts.append("(System.Kind = 'folder' OR System.ItemType = 'Directory')")
+                    else:
+                         where_parts.append(f"System.Kind LIKE '%{kind}%'")
+                
+                where_clause = "WHERE " + " AND ".join(where_parts)
+                order_clause = "ORDER BY System.DateModified DESC, System.ItemName ASC"
+                sql = f"{select_clause} {from_clause} {where_clause} {order_clause}"
+                
+                rs = win32com.client.Dispatch("ADODB.Recordset")
+                rs.Open(sql, conn)
+                
+                count = 0
+                while not rs.EOF and count < limit:
+                    try:
+                        def get_val(f_n):
+                            try: return rs.Fields(f_n).Value
+                            except: return None
+                        results.append({
+                            "name": get_val("System.ItemName"),
+                            "path": get_val("System.ItemPathDisplay"),
+                            "date": str(get_val("System.DateModified")),
+                            "size": 0,
+                            "extension": get_val("System.FileExtension"),
+                            "kind": get_val("System.Kind")
+                        })
+                    except: pass
+                    count += 1
+                    rs.MoveNext()
+                rs.Close()
+            except:
+                # If primary search fails (COM error, timeout, etc.), 
+                # we just leave results empty and let the local walk handle it.
+                pass
+            
+            try: conn.Close()
+            except: pass
         
-        rs.Close()
-        conn.Close()
+        try: rs.Close()
+        except: pass
+        try: conn.Close()
+        except: pass
 
         # STEP 1: Filter SQL results immediately if kind is specified
         # This ensures that if SQL returns filtered-out items, we still trigger fallback.

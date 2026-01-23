@@ -5,7 +5,7 @@ import traceback
 import json
 import time
 from datetime import datetime
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from .utility.config import get_setting, get_log_file, get_status_file
@@ -821,6 +821,16 @@ async def get_index_status():
             return {"percent": 100, "status": "Idle"}
     except Exception as e:
         return {"percent": 0, "status": "Error", "error": str(e)}
+
+@app.post("/refresh-index")
+async def refresh_index_endpoint(background_tasks: BackgroundTasks):
+    """Triggers a background indexing process."""
+    try:
+        from .utility import indexer
+        background_tasks.add_task(indexer.index_all, force=True)
+        return {"status": "ok", "message": "Indexing started..."}
+    except Exception as e:
+        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
 
 if __name__ == "__main__":
     import uvicorn

@@ -38,7 +38,7 @@ body {
     z-index: 10;
 }
 
-#restart-btn {
+.header-actions button {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: white;
@@ -53,9 +53,16 @@ body {
     transition: all 0.2s;
 }
 
-#restart-btn:hover {
+.header-actions button:hover {
     background: rgba(255, 255, 255, 0.2);
+}
+
+#restart-btn:hover {
     transform: rotate(45deg);
+}
+
+#refresh-index-btn:hover {
+    transform: rotate(-180deg);
 }
 
 .user-info {
