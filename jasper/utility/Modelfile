@@ -53,10 +53,10 @@ Input: what is in the documents folder?
 {"intent": "semantic", "params": {"query": "what is in the documents folder", "folder": "documents", "summarize": false}}
 
 Input: check online stock price for AAPL
-{"intent": "chat", "params": {"message": "check online stock price for AAPL"}}
+{"action": "google_search", "query": "stock price for AAPL"}
 
 Input: check the weather in London online
-{"intent": "chat", "params": {"message": "check the weather in London online"}}
+{"action": "google_search", "query": "weather in London"}
 
 Input: hi
 {"intent": "chat", "params": {"message": "hi"}}

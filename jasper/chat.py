@@ -30,12 +30,18 @@ def chat_with_gemma(prompt, allow_fallback=True):
             import re
             try:
                 # 1. Try to find JSON block in the raw content
-                json_match = re.search(r'\{.*"action":\s*"google_search".*\}', raw_content, re.DOTALL)
+                json_match = re.search(r'\{(?:[^{}]|(?R))*\}', raw_content, re.DOTALL)
                 
                 # 2. Extract and parse data if found
                 data = None
                 if json_match:
-                    data = json.loads(json_match.group(0))
+                    try:
+                        data = json.loads(json_match.group(0))
+                    except:
+                        # If complex regex fails, try the specific search one
+                        fallback_match = re.search(r'\{.*"action":\s*"google_search".*\}', raw_content, re.DOTALL)
+                        if fallback_match:
+                            data = json.loads(fallback_match.group(0))
                 elif raw_content.strip().startswith("{") and raw_content.strip().endswith("}"):
                     # Maybe it's ONLY JSON
                     data = json.loads(raw_content)
@@ -48,20 +54,21 @@ def chat_with_gemma(prompt, allow_fallback=True):
                     print(f"DEBUG: Cloud Fallback Triggered -> Query: {query}")
                     return call_gemini_cloud(query)
             except Exception as e:
-                print(f"DEBUG: JSON parse failed (likely just normal text): {e}")
+                print(f"DEBUG: JSON extraction failed: {e}")
 
         # If no fallback or not allowed, CLEAN the content and return it
         import re
         # 1. Strip trailing action/intent JSON blocks
-        clean_content = re.sub(r'\s*\{.*"(action|intent)":\s*".*"\s*\}\s*$', '', raw_content, flags=re.DOTALL)
+        # Looking for any JSON block at the end
+        clean_content = re.sub(r'\s*\{.*\}\s*$', '', raw_content, flags=re.DOTALL)
         
-        # 2. If the entire response is JUST a JSON block (e.g. from an over-eager model),
-        # explaining the search instead of doing it, we should provide a natural message.
+        # 2. Safety filter: If the model just returned JSON without being caught by the search logic
         if clean_content.strip().startswith("{") and clean_content.strip().endswith("}"):
             try:
                 import json
                 data = json.loads(clean_content)
-                if "intent" in data or "action" in data:
+                # If it still looks like an unhandled command, return the error
+                if "intent" in data and data["intent"] != "chat":
                     return f"I'm sorry, I encountered a temporary delay in processing that search request. Could you please try again in a moment?"
             except:
                 pass
