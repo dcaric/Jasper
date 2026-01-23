@@ -52,10 +52,21 @@ def chat_with_gemma(prompt, allow_fallback=True):
 
         # If no fallback or not allowed, CLEAN the content and return it
         import re
-        # Strip trailing JSON-like blocks (internal logic noise)
-        clean_content = re.sub(r'\s*\{.*"action":\s*".*"\s*\}\s*$', '', raw_content, flags=re.DOTALL).strip()
+        # 1. Strip trailing action/intent JSON blocks
+        clean_content = re.sub(r'\s*\{.*"(action|intent)":\s*".*"\s*\}\s*$', '', raw_content, flags=re.DOTALL)
+        
+        # 2. If the entire response is JUST a JSON block (e.g. from an over-eager model),
+        # explaining the search instead of doing it, we should provide a natural message.
+        if clean_content.strip().startswith("{") and clean_content.strip().endswith("}"):
+            try:
+                import json
+                data = json.loads(clean_content)
+                if "intent" in data or "action" in data:
+                    return f"I'm sorry, I encountered a temporary delay in processing that search request. Could you please try again in a moment?"
+            except:
+                pass
             
-        return clean_content
+        return clean_content.strip()
     except Exception as e:
         print(f"Chat Error: {e}")
         traceback.print_exc()

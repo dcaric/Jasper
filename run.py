@@ -236,16 +236,19 @@ def bootstrap():
     print("--- Bootstrap Complete ---\n")
 
 def background_indexer():
-    """Periodically refreshes the semantic index every 4 hours."""
+    """Periodically refreshes the semantic index every 4 hours using an isolated process."""
     print("[BACKGROUND] Background Indexer started.")
-    # Wait a bit after startup to avoid collision with initial bootstrap
     time.sleep(60)
+    
+    python_exe = sys.executable or "python"
     
     while True:
         try:
-            from jasper.utility.indexer import index_all
-            print(f"[{datetime.now()}] [BACKGROUND] Starting periodic index refresh...")
-            index_all()
+            print(f"[{datetime.now()}] [BACKGROUND] Starting periodic index refresh (Isolated)...")
+            # Run as a separate process to avoid GIL blocking
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(BASE_DIR)
+            subprocess.run([python_exe, "-m", "jasper.utility.indexer", "refresh"], cwd=str(BASE_DIR), env=env)
             print(f"[{datetime.now()}] [BACKGROUND] Index refresh complete.")
         except Exception as e:
             print(f"[BACKGROUND] Error in periodic sync: {e}")

@@ -175,7 +175,7 @@ async def process_query(request: Request):
                     format="json",
                     options={ "temperature": 0.0, "stop": ["\n", "User:"], "num_predict": 256 }
                 )),
-                timeout=60.0 # Increased timeout for 4B model
+                timeout=90.0 # Increased timeout for slow system
             )
             raw_content = response.get("response", "").strip()
         except asyncio.TimeoutError:
@@ -208,12 +208,21 @@ async def process_query(request: Request):
                 return await fallback_to_chat()
             
             try:
+                # 1. Direct JSON parse
                 data = json.loads(raw_content)
             except:
-                # If it's not JSON, it might be a valid chat response (or garbage)
-                # But since FunctionGemma sucks at chat, we retry with Gemma3
-                print("DEBUG: Invalid JSON, retrying with Gemma3")
-                return await fallback_to_chat()
+                # 2. Try to extract JSON from text (in case model didn't use format=json or wrapped it)
+                json_match = re.search(r"({.*})", raw_content, re.DOTALL)
+                if json_match:
+                    try:
+                        data = json.loads(json_match.group(1))
+                    except:
+                        print("DEBUG: Extracted JSON but failed to parse, retrying with Gemma3")
+                        return await fallback_to_chat()
+                else:
+                    # If it's not JSON, it might be a valid chat response (or garbage)
+                    print("DEBUG: Invalid JSON, retrying with Gemma3")
+                    return await fallback_to_chat()
             
             # PARSE INTENT
             intent = data.get("intent")
@@ -823,12 +832,43 @@ async def get_index_status():
         return {"percent": 0, "status": "Error", "error": str(e)}
 
 @app.post("/refresh-index")
-async def refresh_index_endpoint(background_tasks: BackgroundTasks):
-    """Triggers a background indexing process."""
+async def refresh_index_endpoint():
+    """Triggers an indexing process in a separate OS process."""
     try:
-        from .utility import indexer
-        background_tasks.add_task(indexer.index_all, force=True)
-        return {"status": "ok", "message": "Indexing started..."}
+        import subprocess
+        import sys
+        
+        # Determine Python executable
+        python_exe = sys.executable or "python"
+        
+        # Command to run: python -m jasper.utility.indexer refresh --force
+        # We run it as a detached process (or at least non-blocking)
+        # Using subprocess.Popen allows it to live independently of the request
+        cmd = [python_exe, "-m", "jasper.utility.indexer", "refresh", "--force"]
+        
+        # Use a custom environment with PYTHONPATH set to the project root
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(BASE_DIR)
+        
+        # On Windows, we use creationflags to ensure it doesn't wait
+        creation_flags = 0
+        if os.name == 'nt':
+            # 0x00000008 = DETACHED_PROCESS
+            creation_flags = 0x00000008
+            
+        subprocess.Popen(
+            cmd,
+            cwd=str(BASE_DIR),
+            env=env,
+            creationflags=creation_flags,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [INDEXER] Started isolated indexing process.\n")
+            
+        return {"status": "ok", "message": "Indexing started in separate process..."}
     except Exception as e:
         return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
 

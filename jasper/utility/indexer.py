@@ -76,21 +76,51 @@ def chunk_text(text, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
         start += (size - overlap)
     return chunks
 
-def index_file(file_path):
-    """Reads, chunks, and adds a file to ChromaDB."""
+def get_indexed_metadata():
+    """Fetches metadata for all indexed files to support incremental indexing."""
+    coll = get_collection()
+    if not coll: return {}
+    
+    results = coll.get(include=['metadatas'])
+    metadata_map = {}
+    if results and results['metadatas']:
+        for meta in results['metadatas']:
+            source = meta.get('source')
+            if source:
+                # Store the most recent mtime/hash seen for this file
+                mtime = meta.get('mtime', 0)
+                f_hash = meta.get('hash', "")
+                if source not in metadata_map or mtime > metadata_map[source]['mtime']:
+                    metadata_map[source] = {'mtime': mtime, 'hash': f_hash}
+    return metadata_map
+
+def index_file(file_path, existing_metadata=None, force=False):
+    """Reads, chunks, and adds a file to ChromaDB if it has changed."""
     try:
         path_obj = Path(file_path)
         if not path_obj.exists(): return
-        
-        mtime = os.path.getmtime(file_path)
-        f_hash = get_file_hash(file_path)
         
         # Supports web dev files and project source
         ext = path_obj.suffix.lower()
         allowed_exts = ['.txt', '.md', '.py', '.bat', '.html', '.css', '.js', '.json', '.c', '.cpp', '.h']
         if ext not in allowed_exts and path_obj.name != 'Modelfile': 
             return
-            
+
+        # Skip extremely large files (> 5MB)
+        if path_obj.stat().st_size > 5 * 1024 * 1024:
+            print(f"Skipping large file: {path_obj.name} ({path_obj.stat().st_size / 1024 / 1024:.2f} MB)")
+            return
+
+        mtime = os.path.getmtime(file_path)
+        f_hash = get_file_hash(file_path)
+        
+        # Check if file has changed
+        if not force and existing_metadata and str(path_obj.absolute()) in existing_metadata:
+            stored = existing_metadata[str(path_obj.absolute())]
+            if stored['mtime'] == mtime and stored['hash'] == f_hash:
+                # print(f"Skipping unchanged file: {path_obj.name}")
+                return
+
         import re
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
@@ -224,15 +254,44 @@ def index_all(force=False):
                     all_files.append(os.path.join(root, file))
 
     total = len(all_files)
-    print(f"Found {total} files to index")
+    print(f"Found {total} files in workspace")
+    
+    # Pre-fetch metadata for incremental indexing
+    existing_metadata = {}
+    if not force:
+        print("Fetching existing index metadata for incremental update...")
+        existing_metadata = get_indexed_metadata()
+        print(f"Found {len(existing_metadata)} files already in index.")
+
+    indexed_count = 0
+    skipped_count = 0
     
     for i, file_path in enumerate(all_files):
         pct = int(((i + 1) / total) * 100) if total > 0 else 100
-        update_status(pct, f"Indexing {Path(file_path).name}")
-        index_file(file_path)
+        
+        # Check if we should skip before calling index_file to avoid overhead
+        path_abs = str(Path(file_path).absolute())
+        should_index = True
+        if not force and path_abs in existing_metadata:
+            try:
+                mtime = os.path.getmtime(file_path)
+                stored = existing_metadata[path_abs]
+                if stored['mtime'] == mtime:
+                    # mtime matches, quick skip
+                    should_index = False
+            except:
+                pass
+
+        if should_index:
+            update_status(pct, f"Processing {Path(file_path).name}")
+            # index_file handles force and deep hash check
+            index_file(file_path, existing_metadata=existing_metadata, force=force)
+            indexed_count += 1
+        else:
+            skipped_count += 1
     
     update_status(100, "Idle")
-    print("Indexing complete.")
+    print(f"Indexing complete. Processed {indexed_count} files, skipped {skipped_count} unchanged files.")
 
 def repair_index():
     """Destroys and recreates the index directory to fix corruption."""
