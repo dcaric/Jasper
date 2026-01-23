@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import datetime
 import argparse
-from .config import get_db_path, get_status_file, get_index_paths
+from .config import get_db_path, get_status_file, get_index_paths, get_log_file
 
 # CONFIGURATION
 DB_PATH = get_db_path()
@@ -14,41 +14,12 @@ COLLECTION_NAME = "jasper_docs"
 CHUNK_SIZE = 1000  # Characters
 CHUNK_OVERLAP = 100
 
-# EMBEDDING MODEL (Chroma Default: all-MiniLM-L6-v2 ONNX)
-embedding_func = embedding_functions.DefaultEmbeddingFunction()
-
-# INITIALIZE CHROMA
-try:
-    client = chromadb.PersistentClient(path=DB_PATH)
-    collection = client.get_or_create_collection(
-        name=COLLECTION_NAME, 
-        embedding_function=embedding_func
-    )
-except Exception as e:
-    print(f"[CRITICAL] Failed to initialize ChromaDB: {e}")
-    if "hnsw" in str(e).lower() or "index" in str(e).lower():
-        print("[REPAIR] Index corruption detected. Attempting automatic repair...")
-        # We can't easily repair in-place here without potentially breaking other imports
-        # But we can define how to handle it in main() or via CLI
-    client = None
-    collection = None
+# INITIALIZE CHROMA (Use shared from semantic_tools to avoid locking)
+from .semantic_tools import client, collection, embedding_func
 
 def get_collection():
     """Safety wrapper to ensure collection is available."""
-    global collection, client
-    if collection is not None:
-        return collection
-    
-    try:
-        client = chromadb.PersistentClient(path=DB_PATH)
-        collection = client.get_or_create_collection(
-            name=COLLECTION_NAME, 
-            embedding_function=embedding_func
-        )
-        return collection
-    except Exception as e:
-        print(f"Error re-acquiring collection: {e}")
-        return None
+    return collection
 
 
 def get_file_hash(path):
@@ -158,10 +129,16 @@ def index_file(file_path, existing_metadata=None, force=False):
             metadatas=metadatas
         )
         safe_name = path_obj.name.encode('ascii', 'ignore').decode('ascii')
-        print(f"Indexed {len(chunks)} chunks from: {safe_name}")
+        msg = f"Indexed {len(chunks)} chunks from: {safe_name}"
+        # print(msg)
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [INDEXER] {msg}\n")
         
     except Exception as e:
-        print(f"Error indexing {file_path}: {e}")
+        msg = f"Error indexing {file_path}: {e}"
+        print(msg)
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [INDEXER] {msg}\n")
 
 def update_status(progress_pct, status_text):
     """Writes progress to a local JSON file for the main app to read."""
@@ -254,14 +231,21 @@ def index_all(force=False):
                     all_files.append(os.path.join(root, file))
 
     total = len(all_files)
-    print(f"Found {total} files in workspace")
+    msg = f"[INDEXER] Found {total} files in workspace"
+    print(msg)
+    with open(get_log_file(), "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now()}] {msg}\n")
     
     # Pre-fetch metadata for incremental indexing
     existing_metadata = {}
     if not force:
-        print("Fetching existing index metadata for incremental update...")
+        msg = "Fetching existing index metadata for incremental update..."
+        print(msg)
         existing_metadata = get_indexed_metadata()
-        print(f"Found {len(existing_metadata)} files already in index.")
+        msg = f"Found {len(existing_metadata)} files already in index."
+        print(msg)
+        with open(get_log_file(), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] [INDEXER] {msg}\n")
 
     indexed_count = 0
     skipped_count = 0
@@ -291,7 +275,10 @@ def index_all(force=False):
             skipped_count += 1
     
     update_status(100, "Idle")
-    print(f"Indexing complete. Processed {indexed_count} files, skipped {skipped_count} unchanged files.")
+    msg = f"Indexing complete. Processed {indexed_count} files, skipped {skipped_count} unchanged files."
+    print(msg)
+    with open(get_log_file(), "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now()}] [INDEXER] {msg}\n")
 
 def repair_index():
     """Destroys and recreates the index directory to fix corruption."""

@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from .utility.config import get_setting, get_log_file, get_status_file
+from .utility.config import get_setting, get_log_file, get_status_file, BASE_DIR
 from .mail.gmail_connector import GmailConnector
 from .mail.outlook_connector import OutlookConnector
 from .filemanager.file_connector import FileConnector
@@ -253,31 +253,21 @@ async def process_query(request: Request):
             ]
             
             # Content Search Guard: Force semantic search if explicit content keywords are used
-            # We use a regex for more flexibility (e.g. "search for the content")
-            import re
-            content_patterns = [
-                r'search\s+(?:for\s+)?(?:the\s+)?content',
-                r'find\s+in\s+files?',
-                r'search\s+inside',
-                r'find\s+file\s+containing',
-                r'what\s+is\s+inside',
-                r'what\s+does\s+the\s+file\s+say\s+about'
-            ]
-            
-            is_content_request = any(re.search(p, low_input) for p in content_patterns)
+            content_keywords = ['context', 'content', 'inside', 'containing', 'contains']
+            is_content_request = any(k in low_input for k in content_keywords)
             
             if is_content_request:
                 intent = "semantic"
-                # Extract query: everything after the keyword match
-                for p in content_patterns:
-                    match = re.search(p, low_input)
-                    if match:
-                        query_part = low_input[match.end():].strip().strip("'").strip('"')
-                        # Remove "of" or "about" if it's the first word after the match
-                        query_part = re.sub(r'^(?:of|about|for)\s+', '', query_part, flags=re.IGNORECASE).strip()
-                        params = {"query": query_part}
-                        break
-                print(f"DEBUG: Content Search Shield triggered for: {low_input}")
+                # Extract query: try to remove common noise words
+                clean_query = low_input
+                for k in content_keywords + ['search', 'find', 'files', 'file', 'for', 'the']:
+                    clean_query = re.sub(rf'\b{k}\b', '', clean_query, flags=re.IGNORECASE).strip()
+                
+                # Remove quotes
+                clean_query = clean_query.strip("'\"")
+                params = {"query": clean_query}
+                
+                print(f"DEBUG: Content Search Shield (Broad) triggered for: {low_input}")
                 with open(get_log_file(), "a", encoding="utf-8") as f:
                     f.write(f"[{datetime.now()}] [INTENT] DEBUG: Content Search Shield Triggered! is_content_request={is_content_request}, new_intent='{intent}', new_params={params}\n")
             
@@ -294,7 +284,7 @@ async def process_query(request: Request):
                     
             if "file" in low_input or "folder" in low_input or "path" in low_input:
                 # If it mentions "in the files" or "content", it should be semantic, not filename-based
-                if any(k in low_input for k in ["content", "in the", "inside", "about", "contain"]):
+                if any(k in low_input for k in ["content", "context", "containing", "in the", "inside", "about", "contain"]):
                     if intent != "semantic":
                         print(f"DEBUG: Overriding intent '{intent}' -> 'semantic' for content search.")
                         intent = "semantic"
@@ -304,7 +294,7 @@ async def process_query(request: Request):
                      if intent != "mail":
                          print(f"DEBUG: Overriding intent '{intent}' -> 'mail' because email keywords present with 'file'.")
                          intent = "mail"
-                elif intent != "files":
+                elif intent != "files" and intent != "semantic": # Don't override semantic
                     print(f"DEBUG: Overriding intent '{intent}' -> 'files' due to keyword.")
                     intent = "files"
             elif any(k in low_input for k in ["mail", "email", "gmail", "outlook", "from", "subject"]):
@@ -832,46 +822,21 @@ async def get_index_status():
         return {"percent": 0, "status": "Error", "error": str(e)}
 
 @app.post("/refresh-index")
-async def refresh_index_endpoint():
-    """Triggers an indexing process in a separate OS process."""
+async def refresh_index_endpoint(background_tasks: BackgroundTasks):
+    """Triggers an indexing process in a background task."""
     try:
-        import subprocess
-        import sys
+        from .utility.indexer import index_all
         
-        # Determine Python executable
-        python_exe = sys.executable or "python"
-        
-        # Command to run: python -m jasper.utility.indexer refresh --force
-        # We run it as a detached process (or at least non-blocking)
-        # Using subprocess.Popen allows it to live independently of the request
-        cmd = [python_exe, "-m", "jasper.utility.indexer", "refresh", "--force"]
-        
-        # Use a custom environment with PYTHONPATH set to the project root
-        env = os.environ.copy()
-        env["PYTHONPATH"] = str(BASE_DIR)
-        
-        # On Windows, we use creationflags to ensure it doesn't wait
-        creation_flags = 0
-        if os.name == 'nt':
-            # 0x00000008 = DETACHED_PROCESS
-            creation_flags = 0x00000008
-            
-        subprocess.Popen(
-            cmd,
-            cwd=str(BASE_DIR),
-            env=env,
-            creationflags=creation_flags,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
+        # Run indexing in background to avoid blocking and database locks
+        background_tasks.add_task(index_all, force=True)
         
         with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now()}] [INDEXER] Started isolated indexing process.\n")
+            f.write(f"[{datetime.now()}] [INDEXER] Background indexing task queued.\n")
             
-        return {"status": "ok", "message": "Indexing started in separate process..."}
+        return {"status": "ok", "message": "Indexing started in background..."}
     except Exception as e:
         return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

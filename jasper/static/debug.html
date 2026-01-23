@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jasper - AI Debug Logs</title>
     <link rel="stylesheet" href="/static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
     <style>
         .debug-container {
             max-width: 1200px;
@@ -13,9 +16,10 @@
             padding: 20px;
             background: #1a1a1a;
             border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
             color: #e0e0e0;
         }
+
         .debug-header {
             display: flex;
             justify-content: space-between;
@@ -24,6 +28,7 @@
             border-bottom: 1px solid #333;
             padding-bottom: 15px;
         }
+
         .log-list {
             list-style: none;
             padding: 0;
@@ -32,15 +37,18 @@
             overflow-y: auto;
             max-height: 70vh;
         }
+
         .log-item {
             padding: 8px 12px;
             border-bottom: 1px solid #222;
             white-space: pre-wrap;
             word-break: break-all;
         }
+
         .log-item:hover {
             background: #252525;
         }
+
         .type-tag {
             display: inline-block;
             padding: 2px 6px;
@@ -50,16 +58,33 @@
             margin-right: 8px;
             text-transform: uppercase;
         }
-        .tag-intent { background: #3b82f6; color: white; }
-        .tag-chat { background: #10b981; color: white; }
-        .tag-gemini { background: #8b5cf6; color: white; }
-        .tag-error { background: #ef4444; color: white; }
-        
+
+        .tag-intent {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .tag-chat {
+            background: #10b981;
+            color: white;
+        }
+
+        .tag-gemini {
+            background: #8b5cf6;
+            color: white;
+        }
+
+        .tag-error {
+            background: #ef4444;
+            color: white;
+        }
+
         .controls {
             display: flex;
             gap: 10px;
             margin-bottom: 15px;
         }
+
         .btn {
             padding: 6px 12px;
             border-radius: 6px;
@@ -69,12 +94,17 @@
             cursor: pointer;
             font-size: 13px;
         }
-        .btn:hover { background: #333; }
+
+        .btn:hover {
+            background: #333;
+        }
+
         .btn.active {
             background: #3b82f6;
             color: white;
             border-color: #3b82f6;
         }
+
         .back-link {
             text-decoration: none;
             color: #3b82f6;
@@ -85,6 +115,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="debug-container">
         <header class="debug-header">
@@ -92,10 +123,10 @@
             <h1>AI Debug Logs</h1>
             <button onclick="fetchLogs()" class="btn">Refresh</button>
         </header>
-        
+
         <div class="controls" id="filter-controls">
             <button class="btn active" onclick="setFilter('all')">All</button>
-            <button class="btn" onclick="setFilter('INTENT')">Intents (Gemma-270M)</button>
+            <button class="btn" onclick="setFilter('INTENT')">Intents (Gemma-4B)</button>
             <button class="btn" onclick="setFilter('CHAT')">Chat (Gemma-4B)</button>
             <button class="btn" onclick="setFilter('GEMINI')">Cloud (Gemini)</button>
         </div>
@@ -131,7 +162,7 @@
         function renderLogs() {
             const list = document.getElementById('log-list');
             list.innerHTML = '';
-            
+
             const filtered = allLogs.filter(log => {
                 if (currentFilter === 'all') return true;
                 return log.includes(`[${currentFilter}]`);
@@ -145,12 +176,12 @@
             filtered.forEach(log => {
                 const li = document.createElement('li');
                 li.className = 'log-item';
-                
+
                 // Colorize tags
                 let html = log.replace(/\[(INTENT|CHAT|GEMINI|ERROR)\]/g, (match, p1) => {
                     return `<span class="type-tag tag-${p1.toLowerCase()}">${p1}</span>`;
                 });
-                
+
                 li.innerHTML = html;
                 list.appendChild(li);
             });
@@ -161,4 +192,5 @@
         setInterval(fetchLogs, 5000);
     </script>
 </body>
+
 </html>
