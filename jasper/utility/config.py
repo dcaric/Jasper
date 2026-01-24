@@ -21,6 +21,22 @@ def get_log_file():
     """Returns the absolute path to debug.log."""
     return str(BASE_DIR / "debug.log")
 
+def log_event(tag, message):
+    """
+    Logs an event to the debug log, ensures every line is tagged 
+    for UI filtering.
+    """
+    from datetime import datetime
+    log_file = get_log_file()
+    timestamp = datetime.now()
+    
+    # Ensure every line in a multi-line message starts with [TAG]
+    lines = str(message).splitlines()
+    with open(log_file, "a", encoding="utf-8") as f:
+        for line in lines:
+            if line.strip():
+                f.write(f"[{timestamp}] [{tag}] {line}\n")
+
 def get_setting(name, default=None):
     """
     Retrieves a setting with the highest priority:

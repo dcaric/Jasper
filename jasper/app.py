@@ -5,10 +5,11 @@ import traceback
 import json
 import time
 from datetime import datetime
+print(f"[{datetime.now()}] [BOOT] Jasper App is loading... FINGERPRINT: 4433221100")
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from .utility.config import get_setting, get_log_file, get_status_file, BASE_DIR
+from .utility.config import get_setting, get_log_file, get_status_file, BASE_DIR, log_event
 from .mail.gmail_connector import GmailConnector
 from .mail.outlook_connector import OutlookConnector
 from .filemanager.file_connector import FileConnector
@@ -83,18 +84,31 @@ def summarize_results_with_gemma(results, original_query):
 
     prompt = (
         f"The user asked: '{original_query}'.\n"
-        f"Based on the following {len(results)} search results, provide a clear, professional summary. "
-        "Group information logically and maintain chronological order if relevant. "
-        "IMPORTANT: Do not output any JSON, and do not suggest using google_search or other tools. "
-        "Just provide the text summary response.\n\n"
-        f"RESULTS:\n{context}\n"
-        "SUMMARY:"
+        f"Based on the following {len(results)} search results, provide a clear, professional summary.\n\n"
+        "STRICT GROUNDING RULES:\n"
+        "1. Use ONLY the provided search results below.\n"
+        "2. CITE the source files for every claim (e.g., 'As seen in index.html...').\n"
+        "3. If a web address or detail is not EXPLICITLY FOUND in the results, state: 'No web address found in the project files.'\n"
+        "4. DO NOT guess URLs. The URL 'apartmentsnautic.com' is INCORRECT and must not be used.\n"
     )
+
+    # 5. Add specific instruction if user asked for examples
+    is_example_req = any(k in original_query.lower() for k in ["example", "snippet", "how to", "code", "template"])
+    if is_example_req:
+        prompt += (
+            "5. IMPORTANT: The user explicitly asked for EXAMPLES. "
+            "Please PROVIDE VERBATIM CODE SNIPPETS from the search results that demonstrate usage. "
+            "Wrap all code snippets in triple backticks with the appropriate language label.\n"
+        )
+    else:
+        prompt += "5. Keep the summary professional and balanced.\n"
+
+    prompt += f"\nRESULTS:\n{context}\nSUMMARY:"
 
     try:
         from . import chat
-        # Use gemma3 (Jasper) for high-quality reasoning, but disable cloud fallback
-        return chat.chat_with_gemma(prompt, allow_fallback=False)
+        # Use custom gemma3 model (4B) for high-quality reasoning summary
+        return chat.chat_with_gemma(prompt, allow_fallback=False, model_name="gemma3")
     except Exception as e:
         return f"I performed the search but failed to generate a summary: {str(e)}"
 
@@ -126,13 +140,24 @@ def summarize_files_iteratively(files, original_query):
             f"The user is searching for: '{original_query}'.\n"
             f"Please summarize the following content from the file '{name}':\n\n"
             f"FILE CONTENT:\n{content}\n\n"
-            "INSTRUCTION: Provide a concise, professional summary of what this file is about. "
-            "Do not output JSON or trigger external searches."
+            "INSTRUCTION: Provide a concise, professional summary.\n"
+            "STRICT GROUNDING: Do not use external knowledge. Do not hallucinate URLs.\n"
+            f"CITE this file ('{name}') in your summary.\n"
         )
+
+        # Detect example request
+        is_example_req = any(k in original_query.lower() for k in ["example", "snippet", "how to", "code", "template"])
+        if is_example_req:
+            prompt += (
+                "IMPORTANT: The user explicitly asked for EXAMPLES. "
+                "Please PROVIDE VERBATIM CODE SNIPPETS from the file content above that demonstrate usage. "
+                "Wrap all code snippets in triple backticks with the appropriate language label.\n"
+            )
 
         try:
             from . import chat
-            file_summary = chat.chat_with_gemma(prompt, allow_fallback=False)
+            # Use custom gemma3 model (4B) for individual file content analysis
+            file_summary = chat.chat_with_gemma(prompt, allow_fallback=False, model_name="gemma3")
             summaries.append(f"**FILE: {name}**\nPath: `{path}`\nSummary: {file_summary}")
         except Exception as e:
             summaries.append(f"**FILE: {name}**\nPath: `{path}`\nError: *Failed to summarize: {str(e)}*")
@@ -159,10 +184,16 @@ async def process_query(request: Request):
     if not user_input:
         return JSONResponse(content={"response": "Please enter a query."})
 
+    function_name = None
+    args = {}
+    intent = None
+    action = None
+    params = {}
+    should_summarize = False
+
     try:
         # LOGGING
-        with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now()}] [INTENT] Input: {user_input}\n")
+        log_event("INTENT", f"Input: {user_input}")
         
         # OLLAMA CALL (Using Jasper - built-in system prompt)
         try:
@@ -179,12 +210,11 @@ async def process_query(request: Request):
             )
             raw_content = response.get("response", "").strip()
         except asyncio.TimeoutError:
-            print(f"[{datetime.now()}] AI Timeout for input: {user_input}")
+            print(f"[{datetime.now()}] [BOOT] Jasper App is loading... FINGERPRINT: 9988776655")
             raw_content = "" # Will trigger fallback
             
-        with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now()}] [INTENT] Response: {raw_content}\n")
-        print(f"Jasper Logic -> {raw_content}")
+        log_event("INTENT", f"Raw AI Response: {raw_content}")
+        print(f"DEBUG: Jasper Raw Logic -> {raw_content}")
 
         try:
              # CLEANUP JSON
@@ -196,11 +226,11 @@ async def process_query(request: Request):
             
             # FALLBACK HELPER
             async def fallback_to_chat():
-                 print(f"[{datetime.now()}] DEBUG: Fallback to Gemma3 triggered.")
+                 print(f"[{datetime.now()}] DEBUG: Fallback to Gemma3 (4B) triggered.")
                  from . import chat
                  # Run in executor to avoid blocking
                  loop = asyncio.get_event_loop()
-                 resp = await loop.run_in_executor(None, lambda: chat.chat_with_gemma(user_input))
+                 resp = await loop.run_in_executor(None, lambda: chat.chat_with_gemma(user_input, model_name="gemma3"))
                  return {"type": "chat", "content": resp}
 
             if not raw_content:
@@ -224,121 +254,41 @@ async def process_query(request: Request):
                     print("DEBUG: Invalid JSON, retrying with Gemma3")
                     return await fallback_to_chat()
             
-            # PARSE INTENT
+            # 1. Start with AI's raw intent
             intent = data.get("intent")
+            action = data.get("action")
             params = data.get("params", {})
+            if not params:
+                params = {k: v for k, v in data.items() if k not in ['intent', 'action']}
+            
             should_summarize = params.get("summarize", False)
-            
-            with open(get_log_file(), "a", encoding="utf-8") as f:
-                f.write(f"[{datetime.now()}] [INTENT] DEBUG: Parsed AI Intent='{intent}', params={params}\n")
-            
+            low_input = user_input.lower()
+
             # DETERMINISTIC SUMMARIZATION GUARD (Safety Net)
-            # If the model is over-eager, we check if the user actually asked for it
-            summarize_keywords = ['summarize', 'summary', 'overview', 'briefly', 'explain', 'sažmi', 'pregled']
-            low_input = user_input.lower()
-            if should_summarize and not any(k in low_input for k in summarize_keywords):
-                print(f"DEBUG: Summarize Guard triggered. Forcing 'should_summarize=False' due to lack of keywords.")
-                should_summarize = False
-                
-            folder = None
-            
-            # DETERMINISTIC INTENT OVERRIDE (Safety Net)
-            low_input = user_input.lower()
-            
-            # Chat Keyword Guard
-            chat_keywords = [
-                'weather', 'stock', 'price', 'news', 'who is', 'what is', 'joke', 'tell me', 
-                'market', 'online', 'check the web', 'web search', 'nyse', 'nasdaq', 'forecast',
-                'bitcoin', 'crypto', 'how to', 'who was'
-            ]
-            
-            # Content Search Guard: Force semantic search if explicit content keywords are used
-            content_keywords = ['context', 'content', 'inside', 'containing', 'contains']
-            is_content_request = any(k in low_input for k in content_keywords)
-            
-            if is_content_request:
-                intent = "semantic"
-                # Extract query: try to remove common noise words
-                clean_query = low_input
-                for k in content_keywords + ['search', 'find', 'files', 'file', 'for', 'the']:
-                    clean_query = re.sub(rf'\b{k}\b', '', clean_query, flags=re.IGNORECASE).strip()
-                
-                # Remove quotes
-                clean_query = clean_query.strip("'\"")
-                params = {"query": clean_query}
-                
-                print(f"DEBUG: Content Search Shield (Broad) triggered for: {low_input}")
-                with open(get_log_file(), "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now()}] [INTENT] DEBUG: Content Search Shield Triggered! is_content_request={is_content_request}, new_intent='{intent}', new_params={params}\n")
-            
-            # GLOBAL CHAT GUARD: Force chat for known external topics
-            # This prevents "check weather" from becoming "search email"
-            elif any(k in low_input for k in chat_keywords):
-                # Ensure we don't block semantics like "what is in the file"
-                # If it has specific file/mail keywords, we rely on the model.
-                # But for generic "what is X", we prefer chat.
-                weak_mail_keywords = ["mail", "email", "gmail", "outlook", "sender", "file", "folder"]
-                if not any(wk in low_input for wk in weak_mail_keywords):
-                    print(f"DEBUG: Keyword Guard triggered. Forcing intent 'chat' due to keyword match.")
-                    intent = "chat"
-                    
-            if "file" in low_input or "folder" in low_input or "path" in low_input:
-                # If it mentions "in the files" or "content", it should be semantic, not filename-based
-                if any(k in low_input for k in ["content", "context", "containing", "in the", "inside", "about", "contain"]):
-                    if intent != "semantic":
-                        print(f"DEBUG: Overriding intent '{intent}' -> 'semantic' for content search.")
-                        intent = "semantic"
-                # Check if it's actually an email request (e.g. "email with file", "outlook file")
-                elif any(k in low_input for k in ["mail", "email", "gmail", "outlook", "sender", "subject", "from"]):
-                     # PROBABLY MAIL
-                     if intent != "mail":
-                         print(f"DEBUG: Overriding intent '{intent}' -> 'mail' because email keywords present with 'file'.")
-                         intent = "mail"
-                elif intent != "files" and intent != "semantic": # Don't override semantic
-                    print(f"DEBUG: Overriding intent '{intent}' -> 'files' due to keyword.")
-                    intent = "files"
-            elif any(k in low_input for k in ["mail", "email", "gmail", "outlook", "from", "subject"]):
-                if intent == "files" or intent is None:
-                    # Only override if it's very likely mail (e.g. contains 'subject' or 'sender' or 'from')
-                     if any(k in low_input for k in ["from", "subject", "gmail", "outlook"]) or (intent is None and any(k in low_input for k in ["mail", "email"])):
-                         print(f"DEBUG: Overriding intent '{intent}' -> 'mail' due to keyword.")
-                         intent = "mail"
-            
-            function_name = None
-            args = {}
+            summarize_kws = ['summarize', 'summary', 'overview', 'briefly', 'explain', 'sažmi', 'pregled']
+            if not should_summarize and any(k in low_input for k in summarize_kws):
+                should_summarize = True
+
+            # FINAL ROUTING LOG
+            print(f"DEBUG: ROUTING -> intent='{intent}', summarize={should_summarize}, query='{params.get('query')}'")
+            log_event("INTENT", f"Final Decision: intent='{intent}', params={params}, summarize={should_summarize}")
             
             # MAP INTENTS TO FUNCTIONS
             if intent == "mail":
                 function_name = "fetch_items"
                 args = params
-                # Default provider if missing
                 if not args.get("provider"):
                     args["provider"] = get_provider()
             
             elif intent == "files":
                 function_name = "search_files"
                 args = params
-                
-                 # Detect 'kind' explicitly from user input if not extracted by AI
                 kind = None
-                q_text = args.get("query", "") or user_input
-                
-                # BUGFIX: Check raw user_input for 'folder' keyword, because q_text might already satisfy the AI extraction
                 lower_raw = user_input.lower()
-                
                 if "folder" in lower_raw or "directory" in lower_raw:
                     kind = "folder"
-                    # Do NOT strip keyword here; let the prefix stripper downstream handle it.
-                    # q_text = re.sub(r'\b(folder|directory)\b', '', q_text, flags=re.IGNORECASE).strip()
-                elif "file" in lower_raw or "document" in lower_raw:
-                     # Only set kind=document if it's explicitly strictly documents, but usually we just default to None (all)
-                     pass 
-                
-                args["query"] = q_text
                 if kind:
                     args["kind"] = kind
-
-                # Robust extraction: if AI put file name in 'subject' or 'sender' or 'message'
                 if not args.get("query"):
                     args["query"] = args.get("subject") or args.get("sender") or args.get("message") or args.get("name")
             
@@ -346,15 +296,11 @@ async def process_query(request: Request):
                 function_name = "semantic_search"
                 args = params
                 
-            elif intent == "chat":
-                # Utilize Gemma3 for chat responses instead of echoing
+            elif intent == "chat" or intent == "google_search":
                 return await fallback_to_chat()
             
-            # Fallback/Safety: If intent is missing or invalid
             if not function_name:
-                print("DEBUG: No valid intent found. Defaulting to Semantic Search.")
-                function_name = "semantic_search"
-                args = {"query": user_input}
+                return await fallback_to_chat()
 
         except Exception as e:
             print(f"Error parsing model output: {e}")
@@ -636,8 +582,7 @@ async def process_query(request: Request):
             # For now, we trust the model's extraction of 'body' vs 'subject'.
             
             # LOGGING PARAMETERS
-            with open(get_log_file(), "a", encoding="utf-8") as f:
-                f.write(f"[{datetime.now()}] [INTENT] Final Params: provider={final_provider}, sender={sender}, subject={subject}, body={body_text}, date_filter={date_filter}, has_attachment={has_attachment}, from={date_from}, to={date_to}\n")
+            log_event("INTENT", f"Final Params: provider={final_provider}, sender={sender}, subject={subject}, body={body_text}, date_filter={date_filter}, has_attachment={has_attachment}, from={date_from}, to={date_to}")
                 
             print(f"DEBUG: Executing find_items(provider='{final_provider}', sender='{sender}', subject='{subject}', body='{body_text}', limit={limit}, from='{date_from}', to='{date_to}')")
                 
@@ -713,10 +658,18 @@ async def process_query(request: Request):
 
             results = connectors["semantic"].search(
                 query=args.get("query"), 
-                limit=args.get("limit", 10), 
+                limit=5, 
                 folder=folder
             )
             
+            # DIAGNOSTIC: See what ChromaDB found
+            log_diag = f"[{datetime.now()}] [RETRIEVAL] Found {len(results)} items.\n"
+            for i, r in enumerate(results):
+                log_diag += f"  [{i+1}] Source: {r.get('path')} | Score: {r.get('score', 'N/A')}\n"
+            
+            log_event("RETRIEVAL", log_diag)
+            print(f"DEBUG: Retrieval diagnostic written to log.")
+
             if isinstance(results, list):
                 if not results:
                      return {"type": "results", "content": f"No matches found for '{args.get('query')}'.", "data": [], "category": "files"}
@@ -739,8 +692,7 @@ async def process_query(request: Request):
     except Exception as e:
         error_trace = traceback.format_exc()
         print(f"Backend Error: {error_trace}")
-        with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now()}] Backend Error: {error_trace}\n")
+        log_event("ERROR", f"Backend Error: {error_trace}")
         return JSONResponse(content={"type": "error", "content": f"Backend Error: {str(e)}", "trace": error_trace}, status_code=500)
 
 @app.post("/open")
@@ -800,8 +752,8 @@ async def get_logs():
         # Use errors="replace" to avoid crashing on non-UTF8 characters
         with open(log_file, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
-            # Return last 100 lines, reversed (newest first)
-            last_lines = lines[-100:]
+            # Return last 500 lines, reversed (newest first)
+            last_lines = lines[-500:]
             last_lines.reverse()
             return {"logs": [line.strip() for line in last_lines if line.strip()]}
     except Exception as e:

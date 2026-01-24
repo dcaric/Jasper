@@ -1,79 +1,102 @@
 import ollama
 import traceback
 from datetime import datetime
-from .utility.config import get_setting, get_log_file
+from .utility.config import get_setting, get_log_file, log_event
 
-def chat_with_gemma(prompt, allow_fallback=True):
+def chat_with_gemma(prompt, allow_fallback=True, model_name=None, options=None):
     """
-    Sends the user prompt to gemma3:4b (or compatible model) 
+    Sends the user prompt to a gemma model 
     and returns the text response.
     """
     try:
-        log_msg = f"[{datetime.now()}] [CHAT] Input: {prompt}\n"
-        with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(log_msg)
-        # Get model from settings (consistent with app.py)
-        model_name = get_setting("MODEL_NAME", "jasper")
-        print(f"DEBUG: asking {model_name} (Jasper) -> '{prompt}'")
+        log_event("CHAT", f"Input: {prompt}")
+        
+        # Default options for RAG consistency (low temperature)
+        if options is None:
+            options = {
+                "temperature": 0.0,
+                "top_p": 0.1,
+                "num_predict": 1024
+            }
+
+        system_prompt = (
+            "You are Jasper, the user's private AI assistant. "
+            "STRICT GROUNDING RULE: Answer ONLY using the provided context or file data. "
+            "If a URL or specific detail is not in the data, state clearly that you don't have it. "
+            "NEVER hallucinate URLs, addresses, or phone numbers. "
+            "You have access to private property data (like Nautic Apartments). Discuss it freely. "
+            "FORMATTING RULE: Always wrap code snippets or technical examples in triple backticks with the language name (e.g., ```css). "
+            "When the user asks for 'examples' or 'how to', provide VERBATIM snippets from the source data where possible."
+        )
         
         response = ollama.chat(model=model_name, messages=[
+            {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': prompt},
-        ])
+        ], options=options)
         raw_content = response['message']['content']
+        print(f"DEBUG: [{model_name}] RAW Response: {raw_content}")
         
-        with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now()}] [CHAT] Response: {raw_content}\n")
+        log_event("CHAT", f"Response: {raw_content}")
 
         # Check for Fallback Signal FIRST (on raw content)
         if allow_fallback:
             import json
             import re
             try:
-                # 1. Try to find JSON block in the raw content
-                json_match = re.search(r'\{(?:[^{}]|(?R))*\}', raw_content, re.DOTALL)
-                
-                # 2. Extract and parse data if found
+                # 1. First, check if the model suggested a search explicitly
+                if 'google_search' in raw_content:
+                    # Look for either "action": "google_search" or "intent": "google_search"
+                    json_match = re.search(r'(\{.*"(?:action|intent)":\s*"google_search".*\})', raw_content, re.DOTALL)
+                    if json_match:
+                        try:
+                            data = json.loads(json_match.group(1))
+                            if data.get("action") == "google_search" or data.get("intent") == "google_search":
+                                query = data.get("query")
+                                log_event("CHAT", f"Fallback Triggered -> Query: {query}")
+                                print(f"DEBUG: Cloud Fallback Triggered -> Query: {query}")
+                                return call_gemini_cloud(query)
+                        except:
+                            print("DEBUG: Found search action but JSON parse failed.")
+
+                # 2. General JSON extraction for other potential future actions
+                json_match = re.search(r'(\{.*\})', raw_content, re.DOTALL)
                 data = None
                 if json_match:
                     try:
-                        data = json.loads(json_match.group(0))
+                        data = json.loads(json_match.group(1))
                     except:
-                        # If complex regex fails, try the specific search one
-                        fallback_match = re.search(r'\{.*"action":\s*"google_search".*\}', raw_content, re.DOTALL)
-                        if fallback_match:
-                            data = json.loads(fallback_match.group(0))
+                        pass
                 elif raw_content.strip().startswith("{") and raw_content.strip().endswith("}"):
-                    # Maybe it's ONLY JSON
-                    data = json.loads(raw_content)
-
-                if isinstance(data, dict) and data.get("action") == "google_search":
-                    query = data.get("query")
-                    log_msg = f"[{datetime.now()}] [CHAT] Fallback Triggered -> Query: {query}\n"
-                    with open(get_log_file(), "a", encoding="utf-8") as f:
-                        f.write(log_msg)
-                    print(f"DEBUG: Cloud Fallback Triggered -> Query: {query}")
-                    return call_gemini_cloud(query)
+                    try:
+                        data = json.loads(raw_content)
+                    except:
+                        pass
             except Exception as e:
-                print(f"DEBUG: JSON extraction failed: {e}")
+                print(f"DEBUG: JSON extraction error: {e}")
 
         # If no fallback or not allowed, CLEAN the content and return it
         import re
         # 1. Strip trailing action/intent JSON blocks
-        # Looking for any JSON block at the end
         clean_content = re.sub(r'\s*\{.*\}\s*$', '', raw_content, flags=re.DOTALL)
+        print(f"DEBUG: Clean Content (Step 1): '{clean_content}'")
         
-        # 2. Safety filter: If the model just returned JSON without being caught by the search logic
-        if clean_content.strip().startswith("{") and clean_content.strip().endswith("}"):
+        # 2. Safety filter: Catch accidental JSON output
+        check_val = clean_content.strip() or raw_content.strip()
+            
+        if "{" in check_val and "}" in check_val:
+            # Try to see if there is an intent JSON inside
             try:
                 import json
-                data = json.loads(clean_content)
-                # If it still looks like an unhandled command, return the error
-                if "intent" in data and data["intent"] != "chat":
-                    return f"I'm sorry, I encountered a temporary delay in processing that search request. Could you please try again in a moment?"
+                # Look for the innermost/actual JSON block
+                json_match = re.search(r'(\{.*\})', check_val, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group(1))
+                    if "intent" in data and data["intent"] != "chat":
+                         return "I found the relevant information in your files, but I had trouble formatting the summary. Could you please try again?"
             except:
                 pass
             
-        return clean_content.strip()
+        return clean_content.strip() or "I found something, but I am having trouble describing it right now."
     except Exception as e:
         print(f"Chat Error: {e}")
         traceback.print_exc()
@@ -104,8 +127,7 @@ def call_gemini_cloud(query):
         
         # Extract text from response (which includes grounding)
         text_resp = response.text
-        with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now()}] [GEMINI] Response: {text_resp}\n")
+        log_event("GEMINI", f"Response: {text_resp}")
         return text_resp
         
     except Exception as e:

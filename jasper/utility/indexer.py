@@ -97,8 +97,18 @@ def index_file(file_path, existing_metadata=None, force=False):
             content = f.read()
             
         if ext == '.html':
+            # Remove scripts and styles
             content = re.sub(r'<(script|style).*?>.*?</\1>', '', content, flags=re.DOTALL | re.IGNORECASE)
+            
+            # EXTRACT IMPORTANT VALUES (URLs, Metadata) before stripping tags
+            # This ensures they end up in the 'text' chunk for embedding
+            meta_contents = re.findall(r'content=["\'](https?://.*?)["\']', content, re.IGNORECASE)
+            links = re.findall(r'href=["\'](https?://.*?)["\']', content, re.IGNORECASE)
+            important_text = "\n".join(meta_contents + links)
+            
+            # Clean tags but keep some spacing
             content = re.sub(r'<.*?>', ' ', content)
+            content = important_text + "\n" + content
             content = re.sub(r'\s+', ' ', content).strip()
             
         if not content.strip(): return

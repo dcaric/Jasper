@@ -128,6 +128,7 @@ body {
 .chat-window {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -137,12 +138,13 @@ body {
 
 .message {
     display: flex;
-    max-width: 85%;
+    width: fit-content;
+    max-width: 90%;
 }
 
 @media (min-width: 800px) {
     .message {
-        max-width: 60%;
+        max-width: 75%;
     }
 }
 
@@ -166,6 +168,10 @@ body {
     line-height: 1.5;
     position: relative;
     box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 100%;
 }
 
 .user .bubble {
@@ -192,6 +198,9 @@ body {
     border-radius: 12px;
     padding: 15px;
     margin-top: 12px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 .email-card .sender {
@@ -230,6 +239,9 @@ body {
     border-radius: 12px;
     padding: 15px;
     margin-top: 12px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 .file-card .file-name {
@@ -442,7 +454,7 @@ body {
 }
 
 .bubble pre {
-    background: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.15);
     padding: 10px;
     border-radius: 8px;
     overflow-x: auto;
@@ -453,7 +465,7 @@ body {
 
 .bubble code {
     font-family: monospace;
-    background: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.15);
     padding: 2px 4px;
     border-radius: 4px;
     font-size: 0.9em;
