@@ -80,28 +80,30 @@ def summarize_results_with_gemma(results, original_query):
         else:
             context += f"Name: {item.get('name')}\nPath: {item.get('path')}\n"
         context += f"Date: {date}\n"
-        context += f"Content: {content[:1000]}\n\n"
+        context += f"Content: {content[:750]}\n\n"
 
     prompt = (
         f"The user asked: '{original_query}'.\n"
-        f"Based on the following {len(results)} search results, provide a clear, professional summary.\n\n"
+        f"Based on the following {len(results)} search results, provide a CLEAR, LUXURY, and PROFESSIONAL summary.\n\n"
+        "STRUCTURE RULES:\n"
+        "1. Use Markdown headers (### [File Name] - [Short Description]) for each file discussed.\n"
+        "2. Provide a descriptive paragraph for each file detailing what the code/content does.\n"
+        "3. If the user asked for EXAMPLES, you MUST provide VERBATIM code snippets in triple backticks (e.g., ```python) for every file.\n\n"
         "STRICT GROUNDING RULES:\n"
         "1. Use ONLY the provided search results below.\n"
-        "2. CITE the source files for every claim (e.g., 'As seen in index.html...').\n"
+        "2. CITE the source files for every claim.\n"
         "3. If a web address or detail is not EXPLICITLY FOUND in the results, state: 'No web address found in the project files.'\n"
-        "4. DO NOT guess URLs. The URL 'apartmentsnautic.com' is INCORRECT and must not be used.\n"
+        "4. DO NOT guess URLs or phone numbers.\n"
     )
 
     # 5. Add specific instruction if user asked for examples
-    is_example_req = any(k in original_query.lower() for k in ["example", "snippet", "how to", "code", "template"])
+    is_example_req = any(k in original_query.lower() for k in ["example", "snippet", "how to", "code", "template", "context"])
     if is_example_req:
         prompt += (
-            "5. IMPORTANT: The user explicitly asked for EXAMPLES. "
-            "Please PROVIDE VERBATIM CODE SNIPPETS from the search results that demonstrate usage. "
-            "Wrap all code snippets in triple backticks with the appropriate language label.\n"
+            "\nIMPORTANT: The user explicitly asked for EXAMPLES. "
+            "You MUST INCLUDE EXTENDED VERBATIM CODE BLOCKS from the source files. "
+            "Do not just summarize; SHOW the code clearly in triple backticks.\n"
         )
-    else:
-        prompt += "5. Keep the summary professional and balanced.\n"
 
     prompt += f"\nRESULTS:\n{context}\nSUMMARY:"
 
@@ -123,7 +125,8 @@ def summarize_files_iteratively(files, original_query):
     summaries = []
     actual_file_count = 0
     
-    for item in files:
+    for i, item in enumerate(files):
+        if i >= 5: break # SAFETY LIMIT: Never summarize more than 5 results iteratively
         if item.get("kind") == "folder":
             continue
             
@@ -140,18 +143,21 @@ def summarize_files_iteratively(files, original_query):
             f"The user is searching for: '{original_query}'.\n"
             f"Please summarize the following content from the file '{name}':\n\n"
             f"FILE CONTENT:\n{content}\n\n"
-            "INSTRUCTION: Provide a concise, professional summary.\n"
+            "INSTRUCTION: Provide a CLEAR, LUXURY, and PROFESSIONAL summary.\n"
+            "STRUCTURE RULES:\n"
+            "1. Use Markdown headers (### [File Name]) for your response.\n"
+            "2. If the user asked for EXAMPLES, you MUST provide VERBATIM code blocks in triple backticks.\n"
             "STRICT GROUNDING: Do not use external knowledge. Do not hallucinate URLs.\n"
-            f"CITE this file ('{name}') in your summary.\n"
+            f"CITE this file ('{name}') in your response.\n"
         )
 
         # Detect example request
-        is_example_req = any(k in original_query.lower() for k in ["example", "snippet", "how to", "code", "template"])
+        is_example_req = any(k in original_query.lower() for k in ["example", "snippet", "how to", "code", "template", "context"])
         if is_example_req:
             prompt += (
-                "IMPORTANT: The user explicitly asked for EXAMPLES. "
-                "Please PROVIDE VERBATIM CODE SNIPPETS from the file content above that demonstrate usage. "
-                "Wrap all code snippets in triple backticks with the appropriate language label.\n"
+                "\nIMPORTANT: The user explicitly asked for EXAMPLES. "
+                "You MUST INCLUDE EXTENDED VERBATIM CODE BLOCKS from the file content above. "
+                "SHOW the code clearly in triple backticks.\n"
             )
 
         try:
@@ -204,7 +210,7 @@ async def process_query(request: Request):
                     model=MODEL_NAME,
                     prompt=f"User: \"{user_input}\"", 
                     format="json",
-                    options={ "temperature": 0.0, "stop": ["\n", "User:"], "num_predict": 256 }
+                    options={ "temperature": 0.0, "stop": ["\n", "User:", "Input:"], "num_predict": 128 }
                 )),
                 timeout=90.0 # Increased timeout for slow system
             )

@@ -237,8 +237,8 @@ def bootstrap():
 
 def background_indexer():
     """Periodically refreshes the semantic index every 4 hours using an isolated process."""
-    print("[BACKGROUND] Background Indexer started.")
-    time.sleep(60)
+    print("[BACKGROUND] Background Indexer scheduled for 10 min from now.")
+    time.sleep(600)
     
     python_exe = sys.executable or "python"
     
