@@ -70,6 +70,7 @@ def summarize_results_with_gemma(results, original_query):
     # Aggregate content
     context = ""
     for i, item in enumerate(results):
+        if i >= 3: break # STRICTOR LIMIT: Reduce prompt workload for 4B model
         source_type = "Email" if item.get("sender") else "File"
         content = item.get("body") or item.get("content") or item.get("summary") or "No content available."
         date = item.get("received") or item.get("date") or "Unknown date"
@@ -80,20 +81,17 @@ def summarize_results_with_gemma(results, original_query):
         else:
             context += f"Name: {item.get('name')}\nPath: {item.get('path')}\n"
         context += f"Date: {date}\n"
-        context += f"Content: {content[:750]}\n\n"
+        context += f"Content: {content[:500]}\n\n"
 
     prompt = (
         f"The user asked: '{original_query}'.\n"
-        f"Based on the following {len(results)} search results, provide a CLEAR, LUXURY, and PROFESSIONAL summary.\n\n"
-        "STRUCTURE RULES:\n"
-        "1. Use Markdown headers (### [File Name] - [Short Description]) for each file discussed.\n"
-        "2. Provide a descriptive paragraph for each file detailing what the code/content does.\n"
-        "3. If the user asked for EXAMPLES, you MUST provide VERBATIM code snippets in triple backticks (e.g., ```python) for every file.\n\n"
-        "STRICT GROUNDING RULES:\n"
-        "1. Use ONLY the provided search results below.\n"
-        "2. CITE the source files for every claim.\n"
-        "3. If a web address or detail is not EXPLICITLY FOUND in the results, state: 'No web address found in the project files.'\n"
-        "4. DO NOT guess URLs or phone numbers.\n"
+        f"Based on the following {len(results)} search results, provide a clean, professional summary.\n\n"
+        "FORMATTING:\n"
+        "1. Start each section with '### [File Name]'.\n"
+        "2. Provide a brief explanation of how it answers the user's query.\n"
+        "3. You MUST provide VERBATIM code snippets in triple backticks for examples.\n\n"
+        "STRICT GROUNDING:\n"
+        "1. Answer ONLY using these results. Do not guess web addresses.\n"
     )
 
     # 5. Add specific instruction if user asked for examples
@@ -126,7 +124,7 @@ def summarize_files_iteratively(files, original_query):
     actual_file_count = 0
     
     for i, item in enumerate(files):
-        if i >= 5: break # SAFETY LIMIT: Never summarize more than 5 results iteratively
+        if i >= 3: break # STRICTOR LIMIT: Reduce prompt workload for 4B model
         if item.get("kind") == "folder":
             continue
             
@@ -141,14 +139,11 @@ def summarize_files_iteratively(files, original_query):
 
         prompt = (
             f"The user is searching for: '{original_query}'.\n"
-            f"Please summarize the following content from the file '{name}':\n\n"
-            f"FILE CONTENT:\n{content}\n\n"
-            "INSTRUCTION: Provide a CLEAR, LUXURY, and PROFESSIONAL summary.\n"
-            "STRUCTURE RULES:\n"
-            "1. Use Markdown headers (### [File Name]) for your response.\n"
-            "2. If the user asked for EXAMPLES, you MUST provide VERBATIM code blocks in triple backticks.\n"
-            "STRICT GROUNDING: Do not use external knowledge. Do not hallucinate URLs.\n"
-            f"CITE this file ('{name}') in your response.\n"
+            f"Summarize this content from '{name}':\n\n"
+            f"FILE CONTENT:\n{content[:5000]}\n\n"
+            "INSTRUCTION: Provide a professional summary with ### [File Name] header.\n"
+            "CODE: Wrap all examples in triple backticks.\n"
+            f"CITE: {name}\n"
         )
 
         # Detect example request
@@ -636,7 +631,7 @@ async def process_query(request: Request):
             
             results = connectors["files"].search(
                 query=query, 
-                limit=args.get("limit", 10), 
+                limit=args.get("limit", 5), 
                 kind=args.get("kind"), 
                 date_from=date_from, 
                 date_to=date_to
@@ -664,7 +659,7 @@ async def process_query(request: Request):
 
             results = connectors["semantic"].search(
                 query=args.get("query"), 
-                limit=5, 
+                limit=args.get("limit", 3), 
                 folder=folder
             )
             

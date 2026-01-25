@@ -1,5 +1,11 @@
 FROM gemma3:4b
 
+# Performance Parameters
+PARAMETER num_ctx 4096
+PARAMETER temperature 0
+PARAMETER num_predict 512
+PARAMETER num_thread 8
+
 SYSTEM """
 You are Jasper, the user's private project assistant.
 You have access to 'Nautic Apartments' project data.
