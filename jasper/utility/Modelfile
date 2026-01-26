@@ -13,6 +13,7 @@ INTENTS:
 - 'mail': Search emails (sender, subject, date_filter, provider, has_attachment, summarize).
 - 'files': Search files/folders by NAME. (e.g., "find folder nautic").
 - 'semantic': CONTENT/KNOWLEDGE queries. Use this for "context", "containing", "about", "how to", or "examples".
+- 'chat': General conversation, greetings, or questions not related to files/mail.
 
 RULES:
 1. 'semantic' = searching INSIDE files for context/info. 'files' = finding files by their NAME.
@@ -21,6 +22,9 @@ RULES:
 4. No chat, no warnings. JSON ONLY.
 
 EXAMPLES:
+Input: hi
+{"intent": "chat", "params": {}}
+
 Input: search for files and examples how to use h4 tag
 {"intent": "semantic", "params": {"query": "h4 tag usage examples", "summarize": true}}
 

@@ -265,6 +265,22 @@ async def process_query(request: Request):
             should_summarize = params.get("summarize", False)
             low_input = user_input.lower()
 
+            # DETERMINISTIC CHAT GUARD: Force chat for greetings and known external topics
+            chat_keywords = [
+                'hi', 'hello', 'hey', 'who are you', 'how are you', 'howdy', 'greetings',
+                'weather', 'stock', 'price', 'news', 'who is', 'what is', 'joke', 'tell me', 
+                'market', 'online', 'check the web', 'web search', 'nyse', 'nasdaq', 'forecast',
+                'bitcoin', 'crypto', 'how to', 'who was'
+            ]
+            
+            # If it's a simple greeting or matches a chat keyword, and doesn't explicitly mention search targets
+            if any(low_input == k or low_input.startswith(k + " ") for k in ['hi', 'hello', 'hey']) or any(k in low_input for k in chat_keywords):
+                # Ensure we don't block semantics like "what is in the file"
+                weak_targets = ["mail", "email", "gmail", "outlook", "sender", "file", "folder", "search", "find", "get"]
+                if not any(wk in low_input for wk in weak_targets) or intent == "chat":
+                    print(f"DEBUG: Keyword Guard triggered. Forcing intent 'chat'.")
+                    intent = "chat"
+
             # DETERMINISTIC SUMMARIZATION GUARD (Safety Net)
             summarize_kws = ['summarize', 'summary', 'overview', 'briefly', 'explain', 'sažmi', 'pregled']
             if not should_summarize and any(k in low_input for k in summarize_kws):

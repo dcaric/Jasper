@@ -183,7 +183,7 @@ def bootstrap():
         
         # 1. Pull Base Models
         for model in required_base_models:
-            if model.lower() not in installed_models:
+            if model.lower() not in [m.split()[0].lower() for m in result.stdout.strip().split('\n')[1:] if m.strip()]:
                 print(f"[BOOTSTRAP] Base model '{model}' not found. Pulling now (this may take a while)...")
                 subprocess.run(["ollama", "pull", model], check=True)
             else:
@@ -191,7 +191,7 @@ def bootstrap():
         
         # 2. Create Custom Models
         for model_name, modelfile_path in custom_models.items():
-            if model_name.lower() not in installed_models:
+            if model_name.lower() not in [m.split()[0].lower() for m in result.stdout.strip().split('\n')[1:] if m.strip()]:
                 if modelfile_path.exists():
                     print(f"[BOOTSTRAP] Custom model '{model_name}' missing. Creating from {modelfile_path.name}...")
                     subprocess.run(["ollama", "create", model_name, "-f", str(modelfile_path)], check=True)

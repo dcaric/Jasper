@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 from .utility.config import get_setting, get_log_file, log_event
 
-def chat_with_gemma(prompt, allow_fallback=True, model_name=None, options=None):
+def chat_with_gemma(prompt, allow_fallback=True, model_name="gemma3", options=None):
     """
     Sends the user prompt to a gemma model 
     and returns the text response.
