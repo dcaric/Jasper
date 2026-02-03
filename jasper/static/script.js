@@ -144,6 +144,16 @@ chatForm.addEventListener('submit', async (e) => {
         const result = await response.json();
         removeTyping();
 
+        // Update Coding Indicator
+        const codingIndicator = document.getElementById('coding-indicator');
+        if (codingIndicator) {
+            if (result.coding_mode === true) {
+                codingIndicator.classList.add('active');
+            } else if (result.coding_mode === false) {
+                codingIndicator.classList.remove('active');
+            }
+        }
+
         if (result.type === 'results') {
             appendMessage('assistant', result.content, result.data);
         } else {
@@ -288,6 +298,26 @@ async function pollIndexStatus() {
     }
 }
 
+async function pollCodingStatus() {
+    try {
+        const resp = await fetch('/coding-status');
+        if (resp.ok) {
+            const data = await resp.json();
+            const indicator = document.getElementById('coding-indicator');
+            if (indicator) {
+                if (data.coding_mode) {
+                    indicator.classList.add('active');
+                } else {
+                    indicator.classList.remove('active');
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Coding status poll failed", e);
+    }
+}
+
 // Start polling on load
 pollIndexStatus();
+pollCodingStatus();
 loadHistory();

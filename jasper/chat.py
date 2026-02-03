@@ -112,11 +112,11 @@ def call_gemini_cloud(query):
         if not api_key:
             return "I need to check the web, but I don't have a GEMINI_API_KEY set."
             
-        print("DEBUG: Calling Gemini 2.0 Flash (Cloud)...")
+        print("DEBUG: Calling Gemini (Cloud)...")
         client = genai.Client(api_key=api_key)
         
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-3-flash-preview',
             contents=query,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(
@@ -133,3 +133,38 @@ def call_gemini_cloud(query):
     except Exception as e:
         traceback.print_exc()
         return f"I tried to check the web, but the cloud connection failed: {str(e)}"
+
+def chat_with_gemini(prompt, system_instruction=None, json_mode=False):
+    """
+    Sends the prompt to Gemini cloud model for general chat/coding tasks.
+    """
+    try:
+        from google import genai
+        from google.genai import types
+        api_key = get_setting("GEMINI_API_KEY")
+        if not api_key:
+            return "GEMINI_API_KEY not set."
+            
+        client = genai.Client(api_key=api_key)
+        
+        config_params = {}
+        if system_instruction:
+            config_params['system_instruction'] = system_instruction
+        if json_mode:
+            config_params['response_mime_type'] = 'application/json'
+            
+        config = types.GenerateContentConfig(**config_params) if config_params else None
+            
+        log_event("GEMINI", f"Input: {prompt[:200]}...")
+        response = client.models.generate_content(
+            model='gemini-3-flash-preview',
+            contents=prompt,
+            config=config
+        )
+        
+        raw_content = response.text
+        log_event("GEMINI", f"Response: {raw_content[:200]}...")
+        return raw_content
+    except Exception as e:
+        log_event("ERROR", f"Gemini Error: {str(e)}")
+        return f"Gemini connection failed: {str(e)}"

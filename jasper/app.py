@@ -34,6 +34,22 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 MODEL_NAME = "jasper"
 
+def get_coding_state():
+    """Reads the current coding mode state from a persistent file."""
+    state_file = os.path.join(BASE_DIR, ".coding_mode")
+    if os.path.exists(state_file):
+        with open(state_file, "r") as f:
+            return f.read().strip() == "ON"
+    return False
+
+def set_coding_state(is_on):
+    """Saves the current coding mode state to a persistent file."""
+    state_file = os.path.join(BASE_DIR, ".coding_mode")
+    with open(state_file, "w") as f:
+        f.write("ON" if is_on else "OFF")
+
+CODING_MODE = get_coding_state() # Initialize from persistent storage
+
 def get_provider():
     return get_setting("PROVIDER", "GMAIL").upper()
 
@@ -168,6 +184,122 @@ def summarize_files_iteratively(files, original_query):
 
     return "\n\n---\n\n".join(summaries)
 
+def handle_coding_task(user_input):
+    """
+    Handles request for script creation using Gemma3.
+    Iteratively tries to solve the problem by feeding back errors to the model.
+    """
+    from . import chat
+    import json
+    import re
+    import subprocess
+    
+    iteration = 1
+    max_iterations = 20
+    conversation_history = []
+    
+    # Scripts directory absolute path
+    scripts_dir = os.path.join(BASE_DIR, "JaspersScripts")
+    if not os.path.exists(scripts_dir):
+        os.makedirs(scripts_dir)
+
+    while iteration <= max_iterations:
+        # Construct the system instruction and feedback
+        system_instr = (
+            "You are an expert software engineer. The user has requested a script or a command to solve a problem.\n"
+            "GUIDELINES:\n"
+            "1. Choose the most appropriate tool: Python, PowerShell (.ps1), or Bash (.sh).\n"
+            "2. If the task is system-level or better suited for shell commands, prioritize PowerShell or Bash.\n"
+            "3. You MUST provide a 'command' that the orchestrator can run in the project root to achieve the goal OR run the script.\n"
+            f"4. SCRIPT LOCATION: Any script you write MUST be referenced as 'JaspersScripts/{ '{filename}' }' in your command.\n"
+            "5. ENCODING RULE: Always use UTF-8. For Python, you MUST include `import sys; sys.stdout.reconfigure(encoding='utf-8')` at the top of your script to prevent Windows encoding errors.\n"
+            "6. Ensure the script is functional and follows best practices.\n\n"
+            "FORMATTING RULE:\n"
+            "You MUST return your response in the following JSON format ONLY:\n"
+            "{\n"
+            "  \"script\": \"content of the script\",\n"
+            "  \"filename\": \"suggested_filename.ext\",\n"
+            "  \"description\": \"simple description for the user\",\n"
+            "  \"command\": \"shell command to run\"\n"
+            "}\n"
+            "IMPORTANT: Output ONLY the JSON block."
+        )
+
+        prompt = f"USER REQUEST: {user_input}\n\n"
+        if conversation_history:
+            prompt += "PREVIOUS ATTEMPTS AND ERRORS:\n"
+            for i, entry in enumerate(conversation_history):
+                prompt += f"Attempt {i+1}:\n- Command: {entry['command']}\n- Error: {entry['error']}\n\n"
+            prompt += "Please fix the issue and try again."
+
+        try:
+            if iteration <= 2:
+                log_event("CODING", f"Iteration {iteration}: Sending prompt to Gemma...")
+                raw_resp = chat.chat_with_gemma(prompt, allow_fallback=False, model_name="gemma3", options={"temperature": 0.4})
+            else:
+                log_event("CODING", f"Iteration {iteration}: Gemma failed, switching to Gemini...")
+                # Pass both system instruction and prompt to Gemini, enabling JSON mode for reliability
+                raw_resp = chat.chat_with_gemini(prompt, system_instruction=system_instr, json_mode=True)
+            
+            # Check for API failure strings returned from chat functions
+            if "connection failed" in raw_resp.lower() or "not set" in raw_resp.lower():
+                log_event("ERROR", f"Abort: LLM API error: {raw_resp}")
+                return {"type": "chat", "content": f"I had to stop because of an API error: {raw_resp}", "coding_mode": True}
+
+            # Parse JSON from response
+            json_match = re.search(r'(\{.*\})', raw_resp, re.DOTALL)
+            if not json_match:
+                iteration += 1
+                conversation_history.append({"command": "N/A", "error": f"Invalid JSON response from model: {raw_resp[:100]}..."})
+                continue
+                
+            data = json.loads(json_match.group(1))
+            script_content = data.get("script")
+            filename = data.get("filename", "script.py")
+            description = data.get("description", "I've created a script for you.")
+            command = data.get("command")
+            
+            if not command:
+                return {"type": "chat", "content": f"I generated a script but no command was provided to run it.\n\n**Description:** {description}", "coding_mode": True}
+
+            # Save the script
+            file_path = os.path.join(scripts_dir, filename)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(script_content)
+            
+            log_event("CODING", f"Saved script to {file_path}")
+            
+            # Execute command
+            log_event("CODING", f"Executing command: {command}")
+            # Ensure environment is set for UTF-8 and capture output correctly
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
+            env["PYTHONUTF8"] = "1"
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30, cwd=BASE_DIR, encoding="utf-8", env=env)
+            
+            stdout = result.stdout.strip()
+            stderr = result.stderr.strip()
+            
+            if result.returncode == 0:
+                log_event("CODING", "Command succeeded!")
+                output_msg = f"### Success on Iteration {iteration}\n\n**Task:** {user_input}\n**Script:** `JaspersScripts/{filename}`\n**Description:** {description}\n\n**Output:**\n```\n{stdout}\n```"
+                return {"type": "chat", "content": output_msg, "coding_mode": True}
+            else:
+                log_event("CODING", f"Command failed with code {result.returncode}")
+                error_info = f"Exit Code: {result.returncode}\nSTDOUT: {stdout}\nSTDERR: {stderr}"
+                conversation_history.append({"command": command, "error": error_info})
+                iteration += 1
+                
+        except Exception as e:
+            log_event("ERROR", f"Iteration {iteration} failed: {str(e)}")
+            conversation_history.append({"command": "Internal Error", "error": str(e)})
+            iteration += 1
+
+    # If we reached here, we failed 20 times
+    log_event("SYSTEM", f"Coding task failed after {max_iterations} iterations.")
+    fail_summary = f"I'm sorry, I tried {max_iterations} times to solve this but kept encountering errors.\n\n**Last Error:**\n```\n{conversation_history[-1]['error'] if conversation_history else 'Unknown error'}\n```"
+    return {"type": "chat", "content": fail_summary, "coding_mode": True}
+
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
     with open(os.path.join(static_path, "index.html"), "r", encoding="utf-8") as f:
@@ -184,6 +316,26 @@ async def process_query(request: Request):
     
     if not user_input:
         return JSONResponse(content={"response": "Please enter a query."})
+
+    global CODING_MODE
+    low_input = user_input.lower().strip().strip(".")
+
+    # Handle Coding Mode Toggles
+    if low_input == "coding on":
+        CODING_MODE = True
+        set_coding_state(True)
+        log_event("SYSTEM", "Coding Mode: ON")
+        return {"type": "chat", "content": "Coding mode is now **ON**. I'm ready to help you write scripts!", "coding_mode": True}
+    
+    if low_input == "coding off":
+        CODING_MODE = False
+        set_coding_state(False)
+        log_event("SYSTEM", "Coding Mode: OFF")
+        return {"type": "chat", "content": "Coding mode is now **OFF**. Returning to standard operation.", "coding_mode": False}
+
+    # If in coding mode, route to handle_coding_task
+    if CODING_MODE:
+        return handle_coding_task(user_input)
 
     function_name = None
     args = {}
@@ -789,6 +941,11 @@ async def get_index_status():
             return {"percent": 100, "status": "Idle"}
     except Exception as e:
         return {"percent": 0, "status": "Error", "error": str(e)}
+
+@app.get("/coding-status")
+async def get_coding_status():
+    """Returns the current persistent coding mode status."""
+    return {"coding_mode": get_coding_state()}
 
 @app.post("/refresh-index")
 async def refresh_index_endpoint(background_tasks: BackgroundTasks):
