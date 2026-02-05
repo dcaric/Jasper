@@ -55,45 +55,72 @@ function appendMessage(role, content, data = null, shouldSave = true) {
                 if (itemKind === 'folder' || itemKind === 'directory') {
                     btnLabel = "Open Folder";
                 }
-                actionLink = `<button onclick="openFileItem('${safePath}')" class="gmail-link" style="background-color: #34a853; border:none; cursor:pointer; color:white;">${btnLabel}</button>`;
 
-                html += `
-                    <div class="file-card">
-                        <div class="file-name">${item.name}</div>
-                        <div class="file-path">${item.path}</div>
-                        <div class="summary" style="font-size: 0.85em; color: #666; margin: 8px 0; border-left: 3px solid #eee; padding-left: 8px;">
-                            ${escapeHTML(item.content || item.summary || 'No snippet available.')}
+                if (item.is_compact) {
+                    const icon = itemKind === 'folder' ? '📁' : '📄';
+                    html += `
+                        <div class="compact-item">
+                            <button onclick="openFileItem('${safePath}')" class="compact-btn" title="Open">${icon}</button>
+                            <span class="compact-name">${item.name}</span>
                         </div>
-                        <div class="file-meta">
-                            <span>Kind: ${item.kind}</span>
-                            <span>Date: ${item.date || item.received || 'Recent'}</span>
+                    `;
+                } else {
+                    actionLink = `<button onclick="openFileItem('${safePath}')" class="gmail-link" style="background-color: #34a853; border:none; cursor:pointer; color:white;">${btnLabel}</button>`;
+
+                    html += `
+                        <div class="file-card">
+                            <div class="file-name">${item.name}</div>
+                            <div class="file-path">${item.path}</div>
+                            <div class="summary" style="font-size: 0.85em; color: #666; margin: 8px 0; border-left: 3px solid #eee; padding-left: 8px;">
+                                ${escapeHTML(item.content || item.summary || 'No snippet available.')}
+                            </div>
+                            <div class="file-meta">
+                                <span>Kind: ${item.kind}</span>
+                                <span>Date: ${item.date || item.received || 'Recent'}</span>
+                            </div>
+                            <div style="margin-top:5px;">
+                                ${actionLink}
+                            </div>
                         </div>
-                        <div style="margin-top:5px;">
-                            ${actionLink}
-                        </div>
-                    </div>
-                `;
+                    `;
+                }
             } else if (item.sender) {
                 // Email result
                 const provider = item.provider || 'GMAIL';
-                if (provider === 'GMAIL') {
-                    const gmailUrl = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(item.message_id)}`;
-                    actionLink = `<a href="${gmailUrl}" target="_blank" class="gmail-link">View in Gmail</a>`;
-                } else {
-                    actionLink = `<button onclick="openOutlookItem('${item.message_id}')" class="gmail-link" style="background-color: #0078d4; border:none; cursor:pointer; color:white;">Open in Outlook</button>`;
-                }
 
-                html += `
-                    <div class="email-card">
-                        <div class="sender">From: ${item.sender}</div>
-                        <div class="subject">${item.subject}</div>
-                        <div class="summary">
-                            ${(item.content || item.summary || 'No content snippet available.')}
+                if (item.is_compact) {
+                    if (provider === 'GMAIL') {
+                        const gmailUrl = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(item.message_id)}`;
+                        actionLink = `<a href="${gmailUrl}" target="_blank" class="compact-btn" title="Open">✉️</a>`;
+                    } else {
+                        actionLink = `<button onclick="openOutlookItem('${item.message_id}')" class="compact-btn" title="Open">✉️</button>`;
+                    }
+                    html += `
+                        <div class="compact-item">
+                            ${actionLink}
+                            <span class="compact-name">${item.subject}</span>
                         </div>
-                        <div class="date">${item.received || 'Recently indexed'}</div>
-                        ${actionLink}
-                    </div>
-                `;
+                    `;
+                } else {
+                    if (provider === 'GMAIL') {
+                        const gmailUrl = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(item.message_id)}`;
+                        actionLink = `<a href="${gmailUrl}" target="_blank" class="gmail-link">View in Gmail</a>`;
+                    } else {
+                        actionLink = `<button onclick="openOutlookItem('${item.message_id}')" class="gmail-link" style="background-color: #0078d4; border:none; cursor:pointer; color:white;">Open in Outlook</button>`;
+                    }
+
+                    html += `
+                        <div class="email-card">
+                            <div class="sender">From: ${item.sender}</div>
+                            <div class="subject">${item.subject}</div>
+                            <div class="summary">
+                                ${(item.content || item.summary || 'No content snippet available.')}
+                            </div>
+                            <div class="date">${item.received || 'Recently indexed'}</div>
+                            ${actionLink}
+                        </div>
+                    `;
+                }
             }
         });
     }
@@ -129,6 +156,9 @@ chatForm.addEventListener('submit', async (e) => {
     const query = userInput.value.trim();
     if (!query) return;
 
+    // RESET Privacy Indicator at start of query
+    updatePrivacyIndicator(false);
+
     appendMessage('user', query);
     userInput.value = '';
 
@@ -144,6 +174,9 @@ chatForm.addEventListener('submit', async (e) => {
         const result = await response.json();
         removeTyping();
 
+        // Update Privacy Indicator based on backend response
+        updatePrivacyIndicator(result.data_sent_to_gemini);
+
         // Update Coding Indicator
         const codingIndicator = document.getElementById('coding-indicator');
         if (codingIndicator) {
@@ -154,16 +187,39 @@ chatForm.addEventListener('submit', async (e) => {
             }
         }
 
-        if (result.type === 'results') {
+        if (result.type === 'results' || (result.data && result.data.length > 0)) {
             appendMessage('assistant', result.content, result.data);
         } else {
             appendMessage('assistant', result.content);
         }
+
+        // Update cost after a query
+        pollGeminiCost();
     } catch (error) {
         removeTyping();
         appendMessage('assistant', 'Error connecting to backend: ' + error.message);
     }
 });
+
+function updatePrivacyIndicator(dataSent) {
+    const indicator = document.getElementById('privacy-indicator');
+    if (!indicator) return;
+
+    const icon = indicator.querySelector('.privacy-icon');
+    const text = indicator.querySelector('.privacy-text');
+
+    if (dataSent) {
+        indicator.className = 'privacy-warning';
+        icon.textContent = '⚠️';
+        text.textContent = 'Cloud Data';
+        indicator.title = 'Local data was sent to Gemini Cloud for processing.';
+    } else {
+        indicator.className = 'privacy-safe';
+        icon.textContent = '🛡️';
+        text.textContent = 'Local Only';
+        indicator.title = 'No local data was sent to the cloud. Only instructions or public web data used.';
+    }
+}
 
 // Restart Service Logic
 const restartBtn = document.getElementById('restart-btn');
@@ -317,7 +373,23 @@ async function pollCodingStatus() {
     }
 }
 
+async function pollGeminiCost() {
+    try {
+        const resp = await fetch('/gemini-cost');
+        if (resp.ok) {
+            const data = await resp.json();
+            const costEl = document.getElementById('gemini-cost-val');
+            if (costEl) {
+                costEl.innerText = data.cost.toFixed(4);
+            }
+        }
+    } catch (e) {
+        console.warn("Gemini cost poll failed", e);
+    }
+}
+
 // Start polling on load
 pollIndexStatus();
 pollCodingStatus();
+pollGeminiCost();
 loadHistory();

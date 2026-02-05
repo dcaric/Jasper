@@ -53,6 +53,25 @@ Future releases will introduce **Agentic Features** where Jasper will have the c
 - **Autonomous Decision Making**: Make logical choices based on the context of your data to resolve blockers.
 - **Task Orchestration**: Proactively initiate new tasks (e.g., drafted replies, calendar scheduling, or file generation) based on its findings.
 
+## Coding Mode (Power User Mode) 🚀
+When the "Coding" toggle is active, Jasper switches from a simple search tool to a **Local Execution Agent**. This mode allows Gemini to solve complex problems by writing and running custom scripts on your machine.
+
+### 1. The Workflow
+1.  **Request**: You ask a complex question (e.g., *"Find all emails from last month about the Hvar project and list the key dates"*).
+2.  **Generation**: Gemini Cloud writes a specialized PowerShell or Python script tailored to your specific request.
+3.  **Local Execution**: Jasper saves the script to `JaspersScripts/` and executes it locally.
+4.  **Self-healing**: If the script fails, Jasper captures the error and asks Gemini to fix it, iterating until success.
+
+### 2. Privacy-First Architecture 🛡️
+Coding Mode is designed with a "Local Truth" philosophy:
+- **Zero-Knowledge Search**: Gemini writes the code *without* seeing your data. The script then runs on your machine, where your data is actually located.
+- **Privacy Sanitization**: If a script fails, Jasper strips all data output (`STDOUT`) and sends only the system error (`STDERR`) back to the cloud for troubleshooting. Your search results **never leave your machine** unless you explicitly ask for a summary.
+
+### 3. Action Links
+When a script finds an item (email, file, or folder), it "tags" it. Jasper automatically converts these tags into interactive **Action Links** in the chat, allowing you to open the discovered item with a single click.
+
+---
+
 ## Installation & Setup
 For a complete step-by-step setup on a new machine, please see [SETUP.md](./SETUP.md).
 

@@ -33,7 +33,14 @@
                     </div>
                 </div>
             </div>
-            <div class="header-actions" style="display: flex; gap: 10px;">
+            <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+                <div id="privacy-indicator" class="privacy-safe" title="Privacy Status">
+                    <span class="privacy-icon">🛡️</span>
+                    <span class="privacy-text">Local Only</span>
+                </div>
+                <div id="gemini-cost-container" class="gemini-cost-container" title="Gemini API Consumption Cost">
+                    Gemini: $<span id="gemini-cost-val">0.0000</span>
+                </div>
                 <button id="refresh-index-btn" title="Refresh Semantic Index (Process Files)">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                         <path

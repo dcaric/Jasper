@@ -15,6 +15,7 @@ from .mail.outlook_connector import OutlookConnector
 from .filemanager.file_connector import FileConnector
 from .filemanager.file_tools import read_file_content
 from .utility.semantic_connector import SemanticConnector
+from .utility.usage import calculate_cost
 
 # Connector Registry
 connectors = {
@@ -123,10 +124,11 @@ def summarize_results_with_gemma(results, original_query):
 
     try:
         from . import chat
-        # Use custom gemma3 model (4B) for high-quality reasoning summary
-        return chat.chat_with_gemma(prompt, allow_fallback=False, model_name="gemma3")
+        # Use Gemini cloud model for high-quality reasoning summary
+        resp, sent = chat.chat_with_gemini(prompt, data_sent_flag=True)
+        return {"content": resp, "data_sent": sent}
     except Exception as e:
-        return f"I performed the search but failed to generate a summary: {str(e)}"
+        return {"content": f"I performed the search but failed to generate a summary: {str(e)}", "data_sent": False}
 
 def summarize_files_iteratively(files, original_query):
     """
@@ -139,6 +141,7 @@ def summarize_files_iteratively(files, original_query):
     summaries = []
     actual_file_count = 0
     
+    overall_data_sent = False
     for i, item in enumerate(files):
         if i >= 3: break # STRICTOR LIMIT: Reduce prompt workload for 4B model
         if item.get("kind") == "folder":
@@ -162,27 +165,19 @@ def summarize_files_iteratively(files, original_query):
             f"CITE: {name}\n"
         )
 
-        # Detect example request
-        is_example_req = any(k in original_query.lower() for k in ["example", "snippet", "how to", "code", "template", "context"])
-        if is_example_req:
-            prompt += (
-                "\nIMPORTANT: The user explicitly asked for EXAMPLES. "
-                "You MUST INCLUDE EXTENDED VERBATIM CODE BLOCKS from the file content above. "
-                "SHOW the code clearly in triple backticks.\n"
-            )
-
         try:
             from . import chat
-            # Use custom gemma3 model (4B) for individual file content analysis
-            file_summary = chat.chat_with_gemma(prompt, allow_fallback=False, model_name="gemma3")
+            # Use Gemini cloud model for individual file content analysis
+            file_summary, sent = chat.chat_with_gemini(prompt, data_sent_flag=True)
+            if sent: overall_data_sent = True
             summaries.append(f"**FILE: {name}**\nPath: `{path}`\nSummary: {file_summary}")
         except Exception as e:
             summaries.append(f"**FILE: {name}**\nPath: `{path}`\nError: *Failed to summarize: {str(e)}*")
 
     if actual_file_count == 0:
-        return "I found only folders, which cannot be summarized by content. Please specify a file name."
+        return {"content": "I found only folders, which cannot be summarized by content. Please specify a file name.", "data_sent": False}
 
-    return "\n\n---\n\n".join(summaries)
+    return {"content": "\n\n---\n\n".join(summaries), "data_sent": overall_data_sent}
 
 def handle_coding_task(user_input):
     """
@@ -213,7 +208,14 @@ def handle_coding_task(user_input):
             "3. You MUST provide a 'command' that the orchestrator can run in the project root to achieve the goal OR run the script.\n"
             f"4. SCRIPT LOCATION: Any script you write MUST be referenced as 'JaspersScripts/{ '{filename}' }' in your command.\n"
             "5. ENCODING RULE: Always use UTF-8. For Python, you MUST include `import sys; sys.stdout.reconfigure(encoding='utf-8')` at the top of your script to prevent Windows encoding errors.\n"
-            "6. Ensure the script is functional and follows best practices.\n\n"
+            "6. BROWSER READING TIP: If asked to 'see' or 'read' an open browser tab, UI Automation alone might fail due to sandboxing. "
+            "Instead, use PowerShell to find the window, bring it to the foreground (`SwitchToThisWindow`), "
+            "then simulate `Ctrl+A` and `Ctrl+C` to copy the page text and read it from the clipboard.\n"
+            "7. Ensure the script is functional and follows best practices.\n"
+            "8. ITEM LINKING: If your script or command finds emails or files, you MUST output a special marker for the orchestrator to create a link.\n"
+            "   - For Outlook Emails: `ITEM_LINK: outlook:{EntryID}:{Subject}`\n"
+            "   - For Files/Folders: `ITEM_LINK: file:{AbsolutePath}:{FileName}`\n"
+            "   - Output these markers on their own lines in the script's output (stdout).\n\n"
             "FORMATTING RULE:\n"
             "You MUST return your response in the following JSON format ONLY:\n"
             "{\n"
@@ -233,13 +235,10 @@ def handle_coding_task(user_input):
             prompt += "Please fix the issue and try again."
 
         try:
-            if iteration <= 2:
-                log_event("CODING", f"Iteration {iteration}: Sending prompt to Gemma...")
-                raw_resp = chat.chat_with_gemma(prompt, allow_fallback=False, model_name="gemma3", options={"temperature": 0.4})
-            else:
-                log_event("CODING", f"Iteration {iteration}: Gemma failed, switching to Gemini...")
-                # Pass both system instruction and prompt to Gemini, enabling JSON mode for reliability
-                raw_resp = chat.chat_with_gemini(prompt, system_instruction=system_instr, json_mode=True)
+            log_event("CODING", f"Iteration {iteration}: Sending prompt to Gemini...")
+            # Pass both system instruction and prompt to Gemini, enabling JSON mode for reliability
+            # NOTE: handle_coding_task typically DOES NOT send local data content, just instructions.
+            raw_resp, sent = chat.chat_with_gemini(prompt, system_instruction=system_instr, json_mode=True, data_sent_flag=False)
             
             # Check for API failure strings returned from chat functions
             if "connection failed" in raw_resp.lower() or "not set" in raw_resp.lower():
@@ -282,11 +281,42 @@ def handle_coding_task(user_input):
             
             if result.returncode == 0:
                 log_event("CODING", "Command succeeded!")
-                output_msg = f"### Success on Iteration {iteration}\n\n**Task:** {user_input}\n**Script:** `JaspersScripts/{filename}`\n**Description:** {description}\n\n**Output:**\n```\n{stdout}\n```"
-                return {"type": "chat", "content": output_msg, "coding_mode": True}
+                
+                # PARSE FOR ITEM LINKS
+                found_items = []
+                # Regex to find ITEM_LINK: outlook:ID:Subject or ITEM_LINK: file:Path:Name
+                link_matches = re.findall(r'ITEM_LINK:\s*(outlook|file):([^:\n]+):([^\n]+)', stdout, re.IGNORECASE)
+                for provider_type, item_id, item_name in link_matches:
+                    item_id = item_id.strip()
+                    item_name = item_name.strip()
+                    if provider_type.lower() == "outlook":
+                        found_items.append({
+                            "sender": "Found via Script",
+                            "subject": item_name,
+                            "message_id": item_id,
+                            "provider": "OUTLOOK",
+                            "received": "Discovered",
+                            "is_compact": True
+                        })
+                    else:
+                        found_items.append({
+                            "name": item_name,
+                            "path": item_id,
+                            "kind": "document", # Default to document
+                            "provider": "FILES",
+                            "is_compact": True
+                        })
+                
+                # Clean links from stdout to keep it pretty
+                clean_stdout = re.sub(r'ITEM_LINK:.*?\n', '', stdout, flags=re.IGNORECASE).strip()
+                if not clean_stdout: clean_stdout = stdout # Fallback if regex was too aggressive
+                
+                output_msg = f"### Success on Iteration {iteration}\n\n**Task:** {user_input}\n**Script:** `JaspersScripts/{filename}`\n**Description:** {description}\n\n**Output:**\n```\n{clean_stdout}\n```"
+                return {"type": "results", "content": output_msg, "data": found_items, "coding_mode": True}
             else:
                 log_event("CODING", f"Command failed with code {result.returncode}")
-                error_info = f"Exit Code: {result.returncode}\nSTDOUT: {stdout}\nSTDERR: {stderr}"
+                # PRIVACY SANITIZATION: Only send STDERR to LLM, omit STDOUT to keep data local
+                error_info = f"Exit Code: {result.returncode}\nSTDERR: {stderr}"
                 conversation_history.append({"command": command, "error": error_info})
                 iteration += 1
                 
@@ -315,27 +345,34 @@ async def process_query(request: Request):
     user_input = body.get("query", "")
     
     if not user_input:
-        return JSONResponse(content={"response": "Please enter a query."})
+        return JSONResponse(content={"response": "Please enter a query.", "data_sent_to_gemini": False})
 
     global CODING_MODE
     low_input = user_input.lower().strip().strip(".")
+    
+    # PRIVACY INDICATOR TRACKER
+    data_sent_to_gemini = False
 
     # Handle Coding Mode Toggles
     if low_input == "coding on":
         CODING_MODE = True
         set_coding_state(True)
         log_event("SYSTEM", "Coding Mode: ON")
-        return {"type": "chat", "content": "Coding mode is now **ON**. I'm ready to help you write scripts!", "coding_mode": True}
+        return {"type": "chat", "content": "Coding mode is now **ON**. I'm ready to help you write scripts!", "coding_mode": True, "data_sent_to_gemini": False}
     
     if low_input == "coding off":
         CODING_MODE = False
         set_coding_state(False)
         log_event("SYSTEM", "Coding Mode: OFF")
-        return {"type": "chat", "content": "Coding mode is now **OFF**. Returning to standard operation.", "coding_mode": False}
+        return {"type": "chat", "content": "Coding mode is now **OFF**. Returning to standard operation.", "coding_mode": False, "data_sent_to_gemini": False}
 
     # If in coding mode, route to handle_coding_task
     if CODING_MODE:
-        return handle_coding_task(user_input)
+        res = handle_coding_task(user_input)
+        # handle_coding_task usually returns a dict. We'll ensure it has the flag.
+        if isinstance(res, dict):
+            res["data_sent_to_gemini"] = res.get("data_sent_to_gemini", False)
+        return res
 
     function_name = None
     args = {}
@@ -379,12 +416,12 @@ async def process_query(request: Request):
             
             # FALLBACK HELPER
             async def fallback_to_chat():
-                 print(f"[{datetime.now()}] DEBUG: Fallback to Gemma3 (4B) triggered.")
-                 from . import chat
+                 print(f"[{datetime.now()}] DEBUG: Fallback to Gemini triggered.")
                  # Run in executor to avoid blocking
                  loop = asyncio.get_event_loop()
-                 resp = await loop.run_in_executor(None, lambda: chat.chat_with_gemma(user_input, model_name="gemma3"))
-                 return {"type": "chat", "content": resp}
+                 from . import chat
+                 resp, sent = await loop.run_in_executor(None, lambda: chat.chat_with_gemini(user_input))
+                 return {"type": "chat", "content": resp, "data_sent_to_gemini": sent}
 
             if not raw_content:
                 # Fallback if AI timed out or returned empty
@@ -473,7 +510,7 @@ async def process_query(request: Request):
 
         except Exception as e:
             print(f"Error parsing model output: {e}")
-            return JSONResponse(content={"response": f"Error: {str(e)}"})
+            return JSONResponse(content={"response": f"Error: {str(e)}", "data_sent_to_gemini": False})
         if function_name == "fetch_items":
             sender = args.get("sender")
             subject = args.get("subject")
@@ -774,16 +811,16 @@ async def process_query(request: Request):
             
             if isinstance(results, list):
                 if not results:
-                    return {"type": "results", "content": "No items found.", "data": []}
+                    return {"type": "results", "content": "No items found.", "data": [], "data_sent_to_gemini": False}
                 else:
                     if should_summarize:
-                        summary_res = summarize_results_with_gemma(results, user_input)
-                        return {"type": "chat", "content": summary_res}
+                        res_dict = summarize_results_with_gemma(results, user_input)
+                        return {"type": "chat", "content": res_dict["content"], "data_sent_to_gemini": res_dict["data_sent"]}
                     
                     for item in results:
                         item["summary"] = summarize_text(item.get("body", ""))
                         item["provider"] = provider
-                    return {"type": "results", "content": f"Found {len(results)} items.", "data": results}
+                    return {"type": "results", "content": f"Found {len(results)} items.", "data": results, "data_sent_to_gemini": False}
             else:
                 return {"type": "error", "content": str(results)}
 
@@ -807,12 +844,12 @@ async def process_query(request: Request):
             
             if isinstance(results, list):
                 if not results:
-                    return {"type": "results", "content": "No files found.", "data": [], "category": "files"}
+                    return {"type": "results", "content": "No files found.", "data": [], "category": "files", "data_sent_to_gemini": False}
                 else:
                     if should_summarize:
-                        summary_res = summarize_files_iteratively(results, user_input)
-                        return {"type": "chat", "content": summary_res}
-                    return {"type": "results", "content": f"Found {len(results)} files.", "data": results, "category": "files"}
+                        res_dict = summarize_files_iteratively(results, user_input)
+                        return {"type": "chat", "content": res_dict["content"], "data_sent_to_gemini": res_dict["data_sent"]}
+                    return {"type": "results", "content": f"Found {len(results)} files.", "data": results, "category": "files", "data_sent_to_gemini": False}
             else:
                 return {"type": "error", "content": str(results)}
 
@@ -841,14 +878,14 @@ async def process_query(request: Request):
 
             if isinstance(results, list):
                 if not results:
-                     return {"type": "results", "content": f"No matches found for '{args.get('query')}'.", "data": [], "category": "files"}
+                     return {"type": "results", "content": f"No matches found for '{args.get('query')}'.", "data": [], "category": "files", "data_sent_to_gemini": False}
                 
                 if should_summarize:
-                    summary_res = summarize_results_with_gemma(results, user_input)
-                    return {"type": "chat", "content": summary_res}
+                    res_dict = summarize_results_with_gemma(results, user_input)
+                    return {"type": "chat", "content": res_dict["content"], "data_sent_to_gemini": res_dict["data_sent"]}
 
                 msg = f"Found {len(results)} relevant semantic matches in your files."
-                return {"type": "results", "content": msg, "data": results, "category": "files"}
+                return {"type": "results", "content": msg, "data": results, "category": "files", "data_sent_to_gemini": False}
             else:
                 return {"type": "error", "content": str(results)}
 
@@ -857,12 +894,12 @@ async def process_query(request: Request):
             return await fallback_to_chat()
                 
     except json.JSONDecodeError:
-        return {"type": "text", "content": raw_content}
+        return {"type": "text", "content": raw_content, "data_sent_to_gemini": False}
     except Exception as e:
         error_trace = traceback.format_exc()
         print(f"Backend Error: {error_trace}")
         log_event("ERROR", f"Backend Error: {error_trace}")
-        return JSONResponse(content={"type": "error", "content": f"Backend Error: {str(e)}", "trace": error_trace}, status_code=500)
+        return JSONResponse(content={"type": "error", "content": f"Backend Error: {str(e)}", "trace": error_trace, "data_sent_to_gemini": False}, status_code=500)
 
 @app.post("/open")
 async def open_email(request: Request):
@@ -946,6 +983,12 @@ async def get_index_status():
 async def get_coding_status():
     """Returns the current persistent coding mode status."""
     return {"coding_mode": get_coding_state()}
+
+@app.get("/gemini-cost")
+async def get_gemini_cost():
+    """Returns the current total cost of Gemini usage."""
+    cost = calculate_cost()
+    return {"cost": round(cost, 4)}
 
 @app.post("/refresh-index")
 async def refresh_index_endpoint(background_tasks: BackgroundTasks):
