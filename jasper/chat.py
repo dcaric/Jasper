@@ -49,7 +49,7 @@ def call_gemini_cloud(query, system_instruction=None):
         config = types.GenerateContentConfig(**config_params)
         
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-3-flash-preview',
             contents=query,
             config=config
         )
@@ -91,7 +91,7 @@ def chat_with_gemini(prompt, system_instruction=None, json_mode=False, data_sent
             
         log_event("GEMINI", f"Input: {prompt[:200]}...")
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-3-flash-preview',
             contents=prompt,
             config=config
         )

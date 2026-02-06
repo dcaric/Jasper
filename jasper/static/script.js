@@ -164,6 +164,16 @@ chatForm.addEventListener('submit', async (e) => {
 
     showTyping();
 
+    // Show STOP button if in coding mode
+    const stopBtn = document.getElementById('stop-btn');
+    if (stopBtn) {
+        // We check if coding indicator is active as a proxy for coding mode
+        const codingIndicator = document.getElementById('coding-indicator');
+        if (codingIndicator && codingIndicator.classList.contains('active')) {
+            stopBtn.style.display = 'flex';
+        }
+    }
+
     try {
         const response = await fetch('/query', {
             method: 'POST',
@@ -176,6 +186,10 @@ chatForm.addEventListener('submit', async (e) => {
 
         // Update Privacy Indicator based on backend response
         updatePrivacyIndicator(result.data_sent_to_gemini);
+
+        // Hide STOP button
+        const stopBtn = document.getElementById('stop-btn');
+        if (stopBtn) stopBtn.style.display = 'none';
 
         // Update Coding Indicator
         const codingIndicator = document.getElementById('coding-indicator');
@@ -197,9 +211,26 @@ chatForm.addEventListener('submit', async (e) => {
         pollGeminiCost();
     } catch (error) {
         removeTyping();
+        const stopBtn = document.getElementById('stop-btn');
+        if (stopBtn) stopBtn.style.display = 'none';
         appendMessage('assistant', 'Error connecting to backend: ' + error.message);
     }
 });
+
+// Stop Button Logic
+const stopBtn = document.getElementById('stop-btn');
+if (stopBtn) {
+    stopBtn.addEventListener('click', async () => {
+        try {
+            stopBtn.disabled = true;
+            stopBtn.style.opacity = '0.5';
+            await fetch('/stop', { method: 'POST' });
+            console.log("Stop signal sent to backend.");
+        } catch (e) {
+            console.error("Failed to send stop signal", e);
+        }
+    });
+}
 
 function updatePrivacyIndicator(dataSent) {
     const indicator = document.getElementById('privacy-indicator');

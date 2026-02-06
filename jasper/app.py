@@ -50,6 +50,8 @@ def set_coding_state(is_on):
         f.write("ON" if is_on else "OFF")
 
 CODING_MODE = get_coding_state() # Initialize from persistent storage
+STOP_CODING_FLAG = False # Global flag for cancellation
+
 
 def get_provider():
     return get_setting("PROVIDER", "GMAIL").upper()
@@ -179,15 +181,19 @@ def summarize_files_iteratively(files, original_query):
 
     return {"content": "\n\n---\n\n".join(summaries), "data_sent": overall_data_sent}
 
-def handle_coding_task(user_input):
+async def handle_coding_task(user_input):
     """
     Handles request for script creation using Gemma3.
     Iteratively tries to solve the problem by feeding back errors to the model.
     """
+    global STOP_CODING_FLAG
+    STOP_CODING_FLAG = False
+    
     from . import chat
     import json
     import re
     import subprocess
+    import asyncio
     
     iteration = 1
     max_iterations = 20
@@ -199,6 +205,10 @@ def handle_coding_task(user_input):
         os.makedirs(scripts_dir)
 
     while iteration <= max_iterations:
+        if STOP_CODING_FLAG:
+            log_event("SYSTEM", "Coding task cancelled by user.")
+            return {"type": "chat", "content": "Execution stopped by user.", "coding_mode": True}
+
         # Construct the system instruction and feedback
         system_instr = (
             "You are an expert software engineer. The user has requested a script or a command to solve a problem.\n"
@@ -238,7 +248,11 @@ def handle_coding_task(user_input):
             log_event("CODING", f"Iteration {iteration}: Sending prompt to Gemini...")
             # Pass both system instruction and prompt to Gemini, enabling JSON mode for reliability
             # NOTE: handle_coding_task typically DOES NOT send local data content, just instructions.
-            raw_resp, sent = chat.chat_with_gemini(prompt, system_instruction=system_instr, json_mode=True, data_sent_flag=False)
+            loop = asyncio.get_event_loop()
+            raw_resp, sent = await loop.run_in_executor(None, lambda: chat.chat_with_gemini(prompt, system_instruction=system_instr, json_mode=True, data_sent_flag=False))
+            
+            if STOP_CODING_FLAG:
+                 return {"type": "chat", "content": "Execution stopped by user.", "coding_mode": True}
             
             # Check for API failure strings returned from chat functions
             if "connection failed" in raw_resp.lower() or "not set" in raw_resp.lower():
@@ -274,7 +288,11 @@ def handle_coding_task(user_input):
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
             env["PYTHONUTF8"] = "1"
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30, cwd=BASE_DIR, encoding="utf-8", env=env)
+            
+            # Use run_in_executor to avoid blocking the loop during subprocess
+            process_func = lambda: subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60, cwd=BASE_DIR, encoding="utf-8", env=env)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, process_func)
             
             stdout = result.stdout.strip()
             stderr = result.stderr.strip()
@@ -368,7 +386,7 @@ async def process_query(request: Request):
 
     # If in coding mode, route to handle_coding_task
     if CODING_MODE:
-        res = handle_coding_task(user_input)
+        res = await handle_coding_task(user_input)
         # handle_coding_task usually returns a dict. We'll ensure it has the flag.
         if isinstance(res, dict):
             res["data_sent_to_gemini"] = res.get("data_sent_to_gemini", False)
@@ -900,6 +918,13 @@ async def process_query(request: Request):
         print(f"Backend Error: {error_trace}")
         log_event("ERROR", f"Backend Error: {error_trace}")
         return JSONResponse(content={"type": "error", "content": f"Backend Error: {str(e)}", "trace": error_trace, "data_sent_to_gemini": False}, status_code=500)
+
+@app.post("/stop")
+async def stop_execution():
+    global STOP_CODING_FLAG
+    STOP_CODING_FLAG = True
+    log_event("SYSTEM", "Stop signal received.")
+    return {"status": "ok", "message": "Stop signal sent."}
 
 @app.post("/open")
 async def open_email(request: Request):
