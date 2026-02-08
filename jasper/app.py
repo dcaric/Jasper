@@ -384,13 +384,30 @@ async def process_query(request: Request):
         log_event("SYSTEM", "Coding Mode: OFF")
         return {"type": "chat", "content": "Coding mode is now **OFF**. Returning to standard operation.", "coding_mode": False, "data_sent_to_gemini": False}
 
-    # If in coding mode, route to handle_coding_task
+    # HYBRID CODING MODE GUARD: Check for "Chat Guard" keywords before routing to coding task
+    chat_keywords = [
+        'hi', 'hello', 'hey', 'who are you', 'how are you', 'howdy', 'greetings',
+        'weather', 'stock', 'price', 'news', 'who is', 'what is', 'joke', 'tell me', 
+        'market', 'online', 'check the web', 'web search', 'nyse', 'nasdaq', 'forecast',
+        'bitcoin', 'crypto', 'how to', 'who was'
+    ]
+    
+    # Check if this is a standard chat/search query
+    is_chat_query = any(low_input == k or low_input.startswith(k + " ") for k in ['hi', 'hello', 'hey']) or any(k in low_input for k in chat_keywords)
+    
+    # Check for explicit code/script requests that should ALWAYS stay in coding mode if it's on
+    is_explicit_code_request = any(kw in low_input for kw in ["script", "code", "automate", "program", "write a", "create a", "fix the"])
+
+    # If in coding mode, route to handle_coding_task UNLESS it's a simple chat query and NOT a script request
     if CODING_MODE:
-        res = await handle_coding_task(user_input)
-        # handle_coding_task usually returns a dict. We'll ensure it has the flag.
-        if isinstance(res, dict):
-            res["data_sent_to_gemini"] = res.get("data_sent_to_gemini", False)
-        return res
+        if is_chat_query and not is_explicit_code_request:
+            log_event("SYSTEM", "Bypassing Coding Mode for standard chat query.")
+        else:
+            res = await handle_coding_task(user_input)
+            # handle_coding_task usually returns a dict. We'll ensure it has the flag.
+            if isinstance(res, dict):
+                res["data_sent_to_gemini"] = res.get("data_sent_to_gemini", False)
+            return res
 
     function_name = None
     args = {}
@@ -472,16 +489,8 @@ async def process_query(request: Request):
             should_summarize = params.get("summarize", False)
             low_input = user_input.lower()
 
-            # DETERMINISTIC CHAT GUARD: Force chat for greetings and known external topics
-            chat_keywords = [
-                'hi', 'hello', 'hey', 'who are you', 'how are you', 'howdy', 'greetings',
-                'weather', 'stock', 'price', 'news', 'who is', 'what is', 'joke', 'tell me', 
-                'market', 'online', 'check the web', 'web search', 'nyse', 'nasdaq', 'forecast',
-                'bitcoin', 'crypto', 'how to', 'who was'
-            ]
-            
             # If it's a simple greeting or matches a chat keyword, and doesn't explicitly mention search targets
-            if any(low_input == k or low_input.startswith(k + " ") for k in ['hi', 'hello', 'hey']) or any(k in low_input for k in chat_keywords):
+            if is_chat_query:
                 # Ensure we don't block semantics like "what is in the file"
                 weak_targets = ["mail", "email", "gmail", "outlook", "sender", "file", "folder", "search", "find", "get"]
                 if not any(wk in low_input for wk in weak_targets) or intent == "chat":
