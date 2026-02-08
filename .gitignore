@@ -41,3 +41,6 @@ desktop.ini
 chroma_db/
 constants.json
 JaspersScripts/
+.coding_mode
+.usage_data
+logs/

@@ -49,6 +49,36 @@ def set_coding_state(is_on):
     with open(state_file, "w") as f:
         f.write("ON" if is_on else "OFF")
 
+def get_help_message():
+    """Constructs a Markdown help message based on current GEMINI_USAGE."""
+    from . import chat
+    gemini_on = chat.is_gemini_enabled()
+    g_on = "✅" if gemini_on else "❌ (Disabled)"
+    
+    msg = (
+        "## 🦾 Jasper Help\n"
+        "Here is what I can do for you:\n\n"
+        
+        "### 📧 Communication\n"
+        "- **Email Search**: Search Gmail or Outlook via `search mail from [sender] subject [topic]`.\n\n"
+        
+        "### 📂 File Management\n"
+        "- **File Search**: Find files in your project with `search for files named [name]`.\n"
+        "- **Folder Search**: Locate directories with `search folders containing [name]`.\n\n"
+        
+        "### 🧠 Intelligence & Cloud\n"
+        f"- **Web Search**: {g_on} Get real-time info with `check on the web what is [topic]`.\n"
+        "- **Summarization**: ✅ Ask me to `summarize` your search results (uses local model if Gemini is off).\n"
+        "- **Semantic Search**: Find data by meaning, even if exact words don't match.\n\n"
+        
+        "### 💻 Engineering\n"
+        f"- **Coding Mode**: {g_on} Enable with `coding on` to let me write and run scripts to solve complex tasks.\n\n"
+        
+        "--- \n"
+        "**Tip**: You can switch modes by saying `coding on` or `coding off`."
+    )
+    return msg
+
 CODING_MODE = get_coding_state() # Initialize from persistent storage
 STOP_CODING_FLAG = False # Global flag for cancellation
 
@@ -125,7 +155,17 @@ def summarize_results_with_gemma(results, original_query):
     prompt += f"\nRESULTS:\n{context}\nSUMMARY:"
 
     if not chat.is_gemini_enabled():
-        return {"content": "Summarization is unavailable because Gemini features are disabled.", "data_sent": False}
+        # LOCAL FALLBACK: Use Ollama (Gemma3 4B)
+        try:
+            log_event("OLLAMA", "Gemini disabled, using local fallback for multi-result summary...")
+            response = ollama.generate(
+                model=MODEL_NAME,
+                prompt=prompt,
+                options={ "temperature": 0.1 }
+            )
+            return {"content": response.get("response", "Local summarization failed.").strip(), "data_sent": False}
+        except Exception as e:
+            return {"content": f"I performed the search but local summarization failed: {str(e)}", "data_sent": False}
 
     try:
         from . import chat
@@ -171,7 +211,17 @@ def summarize_files_iteratively(files, original_query):
         )
 
         if not chat.is_gemini_enabled():
-            summaries.append(f"**FILE: {name}**\nPath: `{path}`\nStatus: *Summarization disabled.*")
+            # LOCAL FALLBACK: Summarize individual file using Ollama
+            try:
+                log_event("OLLAMA", f"Using local fallback for file summarization: {name}")
+                response = ollama.generate(
+                    model=MODEL_NAME,
+                    prompt=prompt,
+                    options={ "temperature": 0.1 }
+                )
+                summaries.append(f"**FILE: {name}**\nPath: `{path}`\nSummary: {response.get('response', '').strip()}")
+            except Exception as e:
+                summaries.append(f"**FILE: {name}**\nPath: `{path}`\nError: *Local summary failed: {str(e)}*")
             continue
 
         try:
@@ -375,6 +425,11 @@ async def process_query(request: Request):
     global CODING_MODE
     low_input = user_input.lower().strip().strip(".")
     
+    # 0. Help Command Guard
+    help_keywords = ["help", "what you can do", "what can you do", "pomoć", "informacije"]
+    if any(k == low_input or low_input.startswith(k + " ") for k in help_keywords):
+        return {"type": "chat", "content": get_help_message(), "coding_mode": CODING_MODE, "data_sent_to_gemini": False}
+
     # PRIVACY INDICATOR TRACKER
     data_sent_to_gemini = False
 
