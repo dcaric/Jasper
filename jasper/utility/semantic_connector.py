@@ -1,6 +1,6 @@
 from .base_connector import SearchConnector
 from .semantic_tools import search_semantic
-from ..filemanager.file_tools import find_files, open_file
+from ..tools.filemanager.file_tools import find_files, open_file
 
 class SemanticConnector(SearchConnector):
     """Connector for Semantic Content Search via ChromaDB with Indexer fallback."""

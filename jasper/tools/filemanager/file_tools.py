@@ -1,7 +1,7 @@
 import os
 import win32com.client
 from datetime import datetime
-from ..utility.config import get_setting, get_log_file
+from ...utility.config import get_setting, get_log_file
 
 # Detect system user
 USER_NAME = get_setting("USER_NAME", os.environ.get("USERNAME", "Unknown"))

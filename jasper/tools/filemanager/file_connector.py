@@ -1,4 +1,4 @@
-from ..utility.base_connector import SearchConnector
+from ...utility.base_connector import SearchConnector
 from .file_tools import find_files, open_file
 
 class FileConnector(SearchConnector):

@@ -1,4 +1,4 @@
-from ..utility.base_connector import SearchConnector
+from ...utility.base_connector import SearchConnector
 from .email_tools import find_emails
 
 class GmailConnector(SearchConnector):

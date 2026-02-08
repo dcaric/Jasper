@@ -1,7 +1,7 @@
-from ..utility.base_connector import SearchConnector
+from ...utility.base_connector import SearchConnector
 from .outlook_tools import find_emails, open_email_by_id
 from .email_tools import find_emails as find_emails_imap
-from ..utility.config import get_setting
+from ...utility.config import get_setting
 
 class OutlookConnector(SearchConnector):
     """Connector for Outlook (COM for Classic, IMAP for New)."""

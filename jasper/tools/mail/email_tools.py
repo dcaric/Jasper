@@ -2,7 +2,7 @@ import imaplib
 import email
 from email.header import decode_header
 import os
-from ..utility.config import get_credentials
+from ...utility.config import get_credentials
 import shlex
 import sys
 import re
