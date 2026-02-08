@@ -114,6 +114,7 @@ python -m jasper.utility.indexer build    # Rebuild from scratch
 - [ ] **Linux (Planned)**: IMAP-first mode, Grep-based local fallback.
 
 ## Usage
+- **Getting Help**: Simply type **"help"** or **"what can you do"** into the dashboard chat to get a structured list of Jasper's current capabilities and feature status.
 - **Start Jasper**: Run `startup/run_web.ps1` or `python run.py`.
 - **Background Mode**: Run `python run.py --background` to detach the process and release the terminal. Logs will be written to `jasper.log`.
 - **Open Dashboard**: Go to [http://localhost:8000](http://localhost:8000).
