@@ -4,6 +4,12 @@ from datetime import datetime
 from .utility.config import get_setting, get_log_file, log_event
 from .utility.usage import update_usage
 
+def is_gemini_enabled():
+    """Checks if Gemini usage is enabled in settings and API key is present."""
+    usage = get_setting("GEMINI_USAGE", "1")
+    key = get_setting("GEMINI_API_KEY")
+    return usage == "1" and bool(key)
+
 def chat_with_gemma(prompt, allow_fallback=True, model_name="gemma3", options=None):
     """
     Sends the user prompt to Gemini (formerly Gemma wrapper).
@@ -31,10 +37,8 @@ def call_gemini_cloud(query, system_instruction=None):
     try:
         from google import genai
         from google.genai import types
-        api_key = get_setting("GEMINI_API_KEY")
-            
-        if not api_key:
-            return "I need to check the web, but I don't have a GEMINI_API_KEY set.", False
+        if not is_gemini_enabled():
+            return "Gemini features are currently disabled via GEMINI_USAGE or missing API key.", False
             
         is_data = len(query) > 2000 or any(kw in query.lower() for kw in ["content:", "email body:", "file content:"])
 
@@ -75,9 +79,10 @@ def chat_with_gemini(prompt, system_instruction=None, json_mode=False, data_sent
     try:
         from google import genai
         from google.genai import types
+        if not is_gemini_enabled():
+            return "Gemini features are currently disabled.", False
+            
         api_key = get_setting("GEMINI_API_KEY")
-        if not api_key:
-            return "GEMINI_API_KEY not set.", False
             
         client = genai.Client(api_key=api_key)
         

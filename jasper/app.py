@@ -124,6 +124,9 @@ def summarize_results_with_gemma(results, original_query):
 
     prompt += f"\nRESULTS:\n{context}\nSUMMARY:"
 
+    if not chat.is_gemini_enabled():
+        return {"content": "Summarization is unavailable because Gemini features are disabled.", "data_sent": False}
+
     try:
         from . import chat
         # Use Gemini cloud model for high-quality reasoning summary
@@ -166,6 +169,10 @@ def summarize_files_iteratively(files, original_query):
             "CODE: Wrap all examples in triple backticks.\n"
             f"CITE: {name}\n"
         )
+
+        if not chat.is_gemini_enabled():
+            summaries.append(f"**FILE: {name}**\nPath: `{path}`\nStatus: *Summarization disabled.*")
+            continue
 
         try:
             from . import chat
@@ -373,6 +380,9 @@ async def process_query(request: Request):
 
     # Handle Coding Mode Toggles
     if low_input == "coding on":
+        from . import chat
+        if not chat.is_gemini_enabled():
+            return {"type": "chat", "content": "Coding mode cannot be enabled because Gemini features are disabled (GEMINI_USAGE=0 or missing API key).", "coding_mode": False, "data_sent_to_gemini": False}
         CODING_MODE = True
         set_coding_state(True)
         log_event("SYSTEM", "Coding Mode: ON")
