@@ -290,16 +290,21 @@ async def handle_coding_task(user_input):
                 
             # Execute the command
             log_event("CODING", f"Executing command: {command}")
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
             
-            ret_code = process.returncode
-            stdout_str = stdout.decode('utf-8', errors='replace')
-            stderr_str = stderr.decode('utf-8', errors='replace')
+            def sync_execute(cmd):
+                import subprocess
+                res = subprocess.run(
+                    cmd,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
+                return res.returncode, res.stdout, res.stderr
+
+            loop = asyncio.get_event_loop()
+            ret_code, stdout_str, stderr_str = await loop.run_in_executor(None, sync_execute, command)
             
             log_event("CODING", f"Result (code {ret_code}): {stdout_str[:200]}...")
             
@@ -312,6 +317,7 @@ async def handle_coding_task(user_input):
                 }
             else:
                 # Store error and retry
+                log_event("CODING", f"Iteration {iteration} failed: {stderr_str or stdout_str}")
                 conversation_history.append({
                     "script": script_content,
                     "error": stderr_str or stdout_str or "Unknown error"
@@ -319,7 +325,9 @@ async def handle_coding_task(user_input):
                 iteration += 1
                 
         except Exception as e:
-            log_event("ERROR", f"Coding Mode Failure: {str(e)}")
+            import traceback
+            error_detail = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+            log_event("ERROR", f"Coding Mode Failure context:\n{error_detail}")
             return {"type": "chat", "content": f"Coding loop failed: {str(e)}", "coding_mode": True}
 
     return {"type": "chat", "content": f"Failed to complete task after {max_iterations} iterations. Check individual errors in logs.", "coding_mode": True}

@@ -42,6 +42,7 @@ def call_gemini_cloud(query, system_instruction=None):
             
         is_data = len(query) > 2000 or any(kw in query.lower() for kw in ["content:", "email body:", "file content:"])
 
+        api_key = get_setting("GEMINI_API_KEY")
         client = genai.Client(api_key=api_key)
         
         config_params = {

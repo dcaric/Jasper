@@ -161,6 +161,7 @@ chatForm.addEventListener('submit', async (e) => {
 
     appendMessage('user', query);
     userInput.value = '';
+    userInput.style.height = '48px'; // Reset to initial height
 
     showTyping();
 
@@ -417,6 +418,24 @@ async function pollGeminiCost() {
     } catch (e) {
         console.warn("Gemini cost poll failed", e);
     }
+}
+
+// Auto-expanding textarea logic
+if (userInput) {
+    userInput.addEventListener('input', function () {
+        this.style.height = '48px'; // Reset height temporarily to get accurate scrollHeight
+        let newHeight = this.scrollHeight;
+        if (newHeight > 150) newHeight = 150; // Cap at max-height
+        if (newHeight < 48) newHeight = 48; // Minimum height
+        this.style.height = newHeight + 'px';
+    });
+
+    userInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chatForm.dispatchEvent(new Event('submit'));
+        }
+    });
 }
 
 // Start polling on load
