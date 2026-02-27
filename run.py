@@ -62,8 +62,11 @@ def ensure_venv():
     """
     # 0. Identify venv directory (support both .venv and venv)
     target_venv = VENV_DIR
-    if not target_venv.exists() and (BASE_DIR / ".venv").exists():
-        target_venv = BASE_DIR / ".venv"
+    if not target_venv.exists():
+        for alt in [".venv", "JasperEnv"]:
+            if (BASE_DIR / alt).exists():
+                target_venv = BASE_DIR / alt
+                break
 
     if is_venv():
         # Even if we are in a venv, we should verify dependencies
@@ -136,12 +139,27 @@ def check_dependencies(python_exe, venv_dir=None):
         if current_hash != stored_hash:
             print("[BOOTSTRAP] Dependencies changed or not verified. Running pip install...")
             try:
-                subprocess.run([str(python_exe), "-m", "pip", "install", "-r", str(requirements)], check=True)
-                # Store the new hash only if pip succeeded
+                # 1. Try using uv if available (faster and handles pip-less venvs)
+                uv_path = shutil.which("uv")
+                if not uv_path and os.name == 'nt':
+                    # Fallback for default uv installation on Windows
+                    user_local_bin = Path.home() / ".local" / "bin" / "uv.exe"
+                    if user_local_bin.exists():
+                        uv_path = str(user_local_bin)
+
+                if uv_path:
+                    print(f"[BOOTSTRAP] Using 'uv' for fast installation ({uv_path})...")
+                    subprocess.run([uv_path, "pip", "install", "-r", str(requirements)], check=True, env={**os.environ, "VIRTUAL_ENV": str(venv_dir)})
+                else:
+                    # 2. Fallback to standard pip
+                    print("[BOOTSTRAP] 'uv' not found. Falling back to standard pip...")
+                    subprocess.run([str(python_exe), "-m", "pip", "install", "-r", str(requirements)], check=True)
+                
+                # Store the new hash only if installation succeeded
                 hash_file.write_text(current_hash)
                 print("[BOOTSTRAP] Dependencies updated and verified.")
             except subprocess.CalledProcessError as e:
-                print(f"[ERROR] Pip install failed: {e}")
+                print(f"[ERROR] Dependency installation failed: {e}")
                 # We don't exit here if we are already in the venv, but we might want to
                 if not is_venv():
                     sys.exit(1)

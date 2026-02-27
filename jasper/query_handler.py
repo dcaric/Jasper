@@ -93,13 +93,15 @@ def summarize_results_with_gemma(results, original_query):
 
     prompt = (
         f"The user asked: '{original_query}'.\n"
-        f"Based on the following {len(results)} search results, provide a clean, professional summary.\n\n"
+        f"Based on the following {len(results)} search results, provide one clean, extremely professional summary.\n\n"
         "FORMATTING:\n"
-        "1. Start each section with '### [File Name]'.\n"
-        "2. Provide a brief explanation of how it answers the user's query.\n"
-        "3. You MUST provide VERBATIM code snippets in triple backticks for examples.\n\n"
+        "1. If results are related, provide a SINGLE synthesized summary that covers everything.\n"
+        "2. If results are distinct, use '### [Subject/File Name]' headers for each.\n"
+        "3. Use bolding for key terms and triple backticks for verbatim code.\n\n"
         "STRICT GROUNDING:\n"
-        "1. Answer ONLY using these results. Do not guess web addresses.\n"
+        "1. Do NOT repeat the same information in different sections.\n"
+        "2. Answer ONLY using these results. If nothing matches, say so.\n"
+        "3. Focus on quality and conciseness. Less is more.\n"
     )
 
     # 5. Add specific instruction if user asked for examples
@@ -456,10 +458,18 @@ async def process_query(request: Request):
 
         intent = intent_data.get("intent")
         action = intent_data.get("action")
-        args = intent_data.get("parameters", {})
-        should_summarize = intent_data.get("should_summarize", False)
+        args = intent_data.get("parameters") or intent_data.get("params") or {}
+        
+        # Consistent detection of summarization flag (handles key/nesting mismatches)
+        should_summarize = (
+            intent_data.get("should_summarize") or 
+            intent_data.get("summarize") or 
+            args.get("should_summarize") or 
+            args.get("summarize") or 
+            False
+        )
 
-        if intent == "email":
+        if intent in ["email", "mail"]:
             function_name = "fetch_items"
         elif intent == "file":
             if action == "semantic_search":
