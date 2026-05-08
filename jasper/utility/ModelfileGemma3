@@ -1,4 +1,4 @@
-FROM gemma3:4b
+FROM gemma4:e4b
 
 # Performance Parameters
 PARAMETER num_ctx 4096

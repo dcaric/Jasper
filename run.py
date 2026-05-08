@@ -185,10 +185,10 @@ def bootstrap():
 
     # 2. Check Ollama Models
     print("[BOOTSTRAP] Step 2: Verifying Ollama models...")
-    required_base_models = ["functiongemma:270m", "gemma3:4b"]
+    required_base_models = ["functiongemma:270m", "gemma4:e4b"]
     custom_models = {
         "jasper": BASE_DIR / "jasper" / "utility" / "Modelfile",
-        "gemma3": BASE_DIR / "jasper" / "utility" / "ModelfileGemma3"
+        "gemma4": BASE_DIR / "jasper" / "utility" / "ModelfileGemma3"
     }
     
     try:
@@ -227,7 +227,7 @@ def bootstrap():
     print("[BOOTSTRAP] Step 2.5: Warming up AI models (Loading into memory)...")
     try:
         import ollama
-        for model in ["jasper", "gemma3"]:
+        for model in ["jasper", "gemma4"]:
             print(f"[BOOTSTRAP] Warming up '{model}'...")
             # Low token budget test call
             ollama.generate(model=model, prompt="hi", options={"num_predict": 5})
@@ -258,16 +258,14 @@ def background_indexer():
     print("[BACKGROUND] Background Indexer scheduled for 10 min from now.")
     time.sleep(600)
     
-    python_exe = sys.executable or "python"
+    import urllib.request
     
     while True:
         try:
-            print(f"[{datetime.now()}] [BACKGROUND] Starting periodic index refresh (Isolated)...")
-            # Run as a separate process to avoid GIL blocking
-            env = os.environ.copy()
-            env["PYTHONPATH"] = str(BASE_DIR)
-            subprocess.run([python_exe, "-m", "jasper.utility.indexer", "refresh"], cwd=str(BASE_DIR), env=env)
-            print(f"[{datetime.now()}] [BACKGROUND] Index refresh complete.")
+            print(f"[{datetime.now()}] [BACKGROUND] Triggering periodic index refresh...")
+            req = urllib.request.Request("http://127.0.0.1:8000/refresh-index", method="POST")
+            with urllib.request.urlopen(req) as response:
+                print(f"[{datetime.now()}] [BACKGROUND] Index refresh queued.")
         except Exception as e:
             print(f"[BACKGROUND] Error in periodic sync: {e}")
         

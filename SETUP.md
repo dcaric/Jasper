@@ -17,7 +17,7 @@ Jasper V1.1 features a **Smart Bootstrapper** that handles the environment, conf
         - Create a virtual environment (`venv/`) if it doesn't exist.
         - Install all required dependencies (`pip install -r requirements.txt`).
         - Create your `.env` file from the example template.
-        - Verify and pull the required AI models (`functiongemma` and `gemma3:4b`).
+        - Verify and pull the required AI models (`functiongemma` and `gemma4:e4b`).
         - Build your initial semantic search index if it doesn't exist.
         - Start the web dashboard at `http://localhost:8000`.
 

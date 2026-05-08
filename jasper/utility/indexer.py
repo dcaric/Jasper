@@ -52,7 +52,11 @@ def get_indexed_metadata():
     coll = get_collection()
     if not coll: return {}
     
-    results = coll.get(include=['metadatas'])
+    try:
+        results = coll.get(include=['metadatas'])
+    except Exception as e:
+        print(f"[ERROR] Failed to read ChromaDB: {e}")
+        raise
     metadata_map = {}
     if results and results['metadatas']:
         for meta in results['metadatas']:
@@ -251,11 +255,18 @@ def index_all(force=False):
     if not force:
         msg = "Fetching existing index metadata for incremental update..."
         print(msg)
-        existing_metadata = get_indexed_metadata()
-        msg = f"Found {len(existing_metadata)} files already in index."
-        print(msg)
-        with open(get_log_file(), "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now()}] [INDEXER] {msg}\n")
+        try:
+            existing_metadata = get_indexed_metadata()
+            msg = f"Found {len(existing_metadata)} files already in index."
+            print(msg)
+            with open(get_log_file(), "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] [INDEXER] {msg}\n")
+        except Exception as e:
+            msg = f"Index read error (may be corrupted or locked by another process). Try repairing the index."
+            print(f"[ERROR] {msg}")
+            with open(get_log_file(), "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] [INDEXER] {msg}\n")
+            return
 
     indexed_count = 0
     skipped_count = 0

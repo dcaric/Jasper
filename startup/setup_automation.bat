@@ -30,13 +30,13 @@ echo [INFO] run_indexer.bat created.
 echo [INFO] Verifying AI Models...
 echo Pulling base models (this may take time)...
 call ollama pull functiongemma:270m
-call ollama pull gemma3:4b
+call ollama pull gemma4:e4b
 
 echo Creating Custom Function Model...
 call ollama create functiongemma -f ..\jasper\utility\Modelfile
 
 echo Creating Custom Chat Model (Jasper)...
-call ollama create gemma3 -f ..\jasper\utility\ModelfileGemma3
+call ollama create gemma4 -f ..\jasper\utility\ModelfileGemma3
 echo [INFO] Models verified.
 
 :: Create Scheduled Tasks

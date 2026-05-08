@@ -123,7 +123,7 @@ async def refresh_index_endpoint(background_tasks: BackgroundTasks):
     """Triggers an indexing process in a background task."""
     try:
         from .utility.indexer import index_all
-        background_tasks.add_task(index_all, force=True)
+        background_tasks.add_task(index_all, force=False)
         with open(get_log_file(), "a", encoding="utf-8") as f:
             f.write(f"[{datetime.now()}] [INDEXER] Background indexing task queued.\n")
         return {"status": "ok", "message": "Indexing started in background..."}

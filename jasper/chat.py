@@ -10,7 +10,7 @@ def is_gemini_enabled():
     key = get_setting("GEMINI_API_KEY")
     return usage == "1" and bool(key)
 
-def chat_with_gemma(prompt, allow_fallback=True, model_name="gemma3", options=None):
+def chat_with_gemma(prompt, allow_fallback=True, model_name="gemma4", options=None):
     """
     Sends the user prompt to Gemini (formerly Gemma wrapper).
     Returns only the text for backward compatibility with most callers, 
@@ -75,14 +75,16 @@ def call_gemini_cloud(query, system_instruction=None):
 
 def chat_with_gemini(prompt, system_instruction=None, json_mode=False, data_sent_flag=False):
     """
-    Sends the prompt to Gemini cloud model and returns (response_text, data_sent_flag).
+    Sends the prompt to Gemini cloud model. 
+    If Gemini is disabled, falls back to local model (Gemma 3 4B).
     """
     try:
+        if not is_gemini_enabled():
+            log_event("CHAT", "Gemini disabled, falling back to local model...")
+            return chat_with_local_model(prompt, system_instruction=system_instruction)
+            
         from google import genai
         from google.genai import types
-        if not is_gemini_enabled():
-            return "Gemini features are currently disabled.", False
-            
         api_key = get_setting("GEMINI_API_KEY")
             
         client = genai.Client(api_key=api_key)
@@ -113,4 +115,27 @@ def chat_with_gemini(prompt, system_instruction=None, json_mode=False, data_sent
         return raw_content, data_sent_flag
     except Exception as e:
         log_event("ERROR", f"Gemini Chat failure: {str(e)}")
-        return f"Gemini connection failed: {str(e)}", False
+        # Ultimate fallback to local if cloud fails unexpectedly
+        return chat_with_local_model(prompt, system_instruction=system_instruction)
+
+def chat_with_local_model(prompt, system_instruction=None, model_name="gemma4:e4b"):
+    """
+    Directly calls the local Ollama model (typically Gemma 3 4B) for chat responses.
+    """
+    try:
+        full_prompt = prompt
+        if system_instruction:
+            full_prompt = f"System Instruction: {system_instruction}\n\nUser Question: {prompt}"
+            
+        log_event("OLLAMA", f"Local Chat ({model_name}) Input: {prompt[:100]}...")
+        response = ollama.generate(
+            model=model_name,
+            prompt=full_prompt,
+            options={ "temperature": 0.7 }
+        )
+        content = response.get("response", "No response from local model.").strip()
+        log_event("OLLAMA", f"Local Response: {content[:100]}...")
+        return content, False # data_sent is False because it's local
+    except Exception as e:
+        log_event("ERROR", f"Local model failure: {str(e)}")
+        return f"I'm sorry, my local thinking module ({model_name}) failed: {str(e)}", False

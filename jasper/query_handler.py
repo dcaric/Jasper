@@ -420,8 +420,9 @@ async def process_query(request: Request):
 
         # FALLBACK HELPER
         async def fallback_to_chat():
-             log_event("SYSTEM", "Fallback to Gemini triggered.")
+             log_event("SYSTEM", "Transitioning to standard chat response...")
              loop = asyncio.get_event_loop()
+             # chat_with_gemini now correctly handles local fallback within itself
              resp, sent = await loop.run_in_executor(None, lambda: chat.chat_with_gemini(user_input))
              return {"type": "chat", "content": resp, "data_sent_to_gemini": sent}
 
