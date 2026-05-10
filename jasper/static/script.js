@@ -92,6 +92,10 @@ function appendMessage(role, content, data = null, shouldSave = true) {
                     if (provider === 'GMAIL') {
                         const gmailUrl = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(item.message_id)}`;
                         actionLink = `<a href="${gmailUrl}" target="_blank" class="compact-btn" title="Open">✉️</a>`;
+                    } else if (provider === 'TEAMS' && item.web_url) {
+                        actionLink = `<a href="${item.web_url}" target="_blank" class="compact-btn" title="Open">💬</a>`;
+                    } else if (provider === 'TEAMS') {
+                        actionLink = `<span class="compact-btn" title="Teams message">💬</span>`;
                     } else {
                         actionLink = `<button onclick="openOutlookItem('${item.message_id}')" class="compact-btn" title="Open">✉️</button>`;
                     }
@@ -105,6 +109,11 @@ function appendMessage(role, content, data = null, shouldSave = true) {
                     if (provider === 'GMAIL') {
                         const gmailUrl = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(item.message_id)}`;
                         actionLink = `<a href="${gmailUrl}" target="_blank" class="gmail-link">View in Gmail</a>`;
+                    } else if (provider === 'TEAMS') {
+                        const teamsUrl = item.web_url ? escapeHTML(item.web_url) : '';
+                        actionLink = teamsUrl
+                            ? `<a href="${teamsUrl}" target="_blank" class="gmail-link" style="background-color: #6264a7;">View in Teams</a>`
+                            : `<span class="gmail-link" style="background-color: #6264a7; opacity: 0.75;">Teams message</span>`;
                     } else {
                         actionLink = `<button onclick="openOutlookItem('${item.message_id}')" class="gmail-link" style="background-color: #0078d4; border:none; cursor:pointer; color:white;">Open in Outlook</button>`;
                     }
@@ -116,7 +125,7 @@ function appendMessage(role, content, data = null, shouldSave = true) {
                             <div class="summary">
                                 ${(item.content || item.summary || 'No content snippet available.')}
                             </div>
-                            <div class="date">${item.received || 'Recently indexed'}</div>
+                            <div class="date">${item.received || 'Recently indexed'}${provider === 'TEAMS' && item.container_name ? ` • ${escapeHTML(item.container_name)}` : ''}</div>
                             ${actionLink}
                         </div>
                     `;

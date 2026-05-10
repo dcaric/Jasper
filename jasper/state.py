@@ -3,6 +3,7 @@ import ollama
 from .utility.config import get_setting, BASE_DIR
 from .tools.mail.gmail_connector import GmailConnector
 from .tools.mail.outlook_connector import OutlookConnector
+from .tools.teams.teams_connector import TeamsConnector
 from .tools.filemanager.file_connector import FileConnector
 from .utility.semantic_connector import SemanticConnector
 
@@ -29,6 +30,7 @@ STOP_CODING_FLAG = False
 connectors = {
     "mail_gmail": GmailConnector(),
     "mail_outlook": OutlookConnector(),
+    "mail_teams": TeamsConnector(),
     "files": FileConnector(),
     "semantic": SemanticConnector()
 }

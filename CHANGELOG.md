@@ -7,6 +7,7 @@ All notable changes to the Jasper project will be documented in this file.
 ### Added
 - **Smart Bootstrapper**: Added `run.py` as the primary entry point which automatically handles environment setup (`.env`), missing AI models via Ollama, and initial index building.
 - **Standardized Search Connectors**: Implemented `SearchConnector` ABC. Gmail, Outlook (Hybrid COM/IMAP), Files, and Semantic search are now modular plugins.
+- **Teams Phase 1 Search**: Added a read-only Microsoft Teams connector using Microsoft Graph for chat search and optional configured channel search.
 - **Environment Variable Support**: Added `python-dotenv` integration for secure credential management.
 - **Index Management CLI**: `indexer.py` now supports `build`, `refresh`, `status`, and `prune` commands.
 - **Gemma3 Support**: Integrated Gemma3 4B as the primary summarization and chat fallback specialist.

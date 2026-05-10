@@ -23,7 +23,8 @@ def get_help_message():
         "Here is what I can do for you:\n\n"
         
         "### 📧 Communication\n"
-        "- **Email Search**: Search Gmail or Outlook via `search mail from [sender] subject [topic]`.\n\n"
+        "- **Email Search**: Search Gmail or Outlook via `search mail from [sender] subject [topic]`.\n"
+        "- **Teams Search**: Search Microsoft Teams messages via `search teams from [sender] about [topic]`.\n\n"
         
         "### 📂 File Management\n"
         "- **File Search**: Find files in your project with `search for files named [name]`.\n"
@@ -43,7 +44,10 @@ def get_help_message():
     return msg
 
 def get_provider():
-    return get_setting("PROVIDER", "GMAIL").upper()
+    provider = get_setting("PROVIDER", "GMAIL").upper()
+    if provider == "TEAMS":
+        return "TEAMS"
+    return provider
 
 def summarize_text(text):
     if not text or len(text.strip()) < 10:
@@ -450,7 +454,7 @@ async def process_query(request: Request):
         # BROAD NOISE STRIPPING
         def clean_noise(text):
             if not text: return None
-            noise_words = ["search", "find", "get", "show", "fetch", "email", "mail", "gmail", "outlook", "item", "items", "for", "from", "in", "about"]
+            noise_words = ["search", "find", "get", "show", "fetch", "email", "mail", "gmail", "outlook", "teams", "team", "message", "messages", "item", "items", "for", "from", "in", "about"]
             parts = text.split()
             cleaned = [p for p in parts if p.lower() not in noise_words]
             res = " ".join(cleaned).strip()
@@ -469,6 +473,9 @@ async def process_query(request: Request):
             args.get("summarize") or 
             False
         )
+
+        if "teams" in user_input.lower():
+            intent = "mail"
 
         if intent in ["email", "mail"]:
             function_name = "fetch_items"
@@ -498,13 +505,15 @@ async def process_query(request: Request):
         lower_input = user_input.lower()
         if any(k in lower_input for k in ["gmail", "google"]): final_provider = "GMAIL"
         elif any(k in lower_input for k in ["outlook", "exchange"]): final_provider = "OUTLOOK"
+        elif "teams" in lower_input: final_provider = "TEAMS"
         if not final_provider: final_provider = get_provider()
 
         body_text = clean_noise(args.get("body") or args.get("content"))
 
         # EXECUTION
         if function_name == "fetch_items":
-            connector = state.connectors.get(f"mail_{final_provider.lower()}", state.connectors["mail_gmail"])
+            default_connector = state.connectors["mail_gmail"]
+            connector = state.connectors.get(f"mail_{final_provider.lower()}", default_connector)
             results = connector.search(sender=sender, subject=subject, body=body_text, limit=limit, date_from=date_from, date_to=date_to, has_attachment=has_attachment)
             if isinstance(results, list):
                 if not results: return {"type": "results", "content": "No items found.", "data": [], "data_sent_to_gemini": False}
@@ -515,6 +524,8 @@ async def process_query(request: Request):
                     item["summary"] = summarize_text(item.get("body", ""))
                     item["provider"] = final_provider
                 return {"type": "results", "content": f"Found {len(results)} items.", "data": results, "data_sent_to_gemini": False}
+            if isinstance(results, str):
+                return {"type": "chat", "content": results, "data_sent_to_gemini": False}
 
         elif function_name == "search_files":
             query = clean_noise(args.get("query") or args.get("name"))

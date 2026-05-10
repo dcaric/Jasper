@@ -10,7 +10,7 @@ Unlike native search tools that may fail to index deep file content, Jasper uses
 ![Jasper Search Results](images/j2.png)
 
 ## Features
-- **Unified Search**: Consolidate searches across Gmail, Outlook, Local Files, and the Web via a standardized plugin interface.
+- **Unified Search**: Consolidate searches across Gmail, Outlook, Microsoft Teams, Local Files, and the Web via a standardized plugin interface.
 - **AI Architecture**: Powered by a multi-model stack (FunctionGemma, Gemma3, and Gemini) with a "Hybrid Core" philosophy.
 - **Semantic Content Search**: Search *inside* files (HTML, JS, CSS, TXT) using AI-powered meaning matching (ChromaDB).
 - **Deep File Discovery**: Robust 2-level recursive search fallback for nested project directories.
@@ -88,9 +88,11 @@ Jasper prioritizes security by separating secrets from configuration:
 Copy `.env.example` to `.env`. This is where you store both secrets and general settings:
 - `GEMINI_API_KEY`: Get one at [Google AI Studio](https://aistudio.google.com/)
 - `GMAIL_PASS`: Google App Password
-- `PROVIDER`: `GMAIL` or `OUTLOOK`
+- `PROVIDER`: `GMAIL`, `OUTLOOK`, or `TEAMS`
 - `USER_NAME`: Your Windows profile name.
 - `INDEX_PATHS`: Comma-separated list of directories to index.
+- `TEAMS_ACCESS_TOKEN`: Delegated Microsoft Graph bearer token for Teams read-only search.
+- `TEAMS_TEAM_IDS`: Optional comma-separated team IDs for channel search.
 
 ---
 
@@ -98,6 +100,7 @@ Copy `.env.example` to `.env`. This is where you store both secrets and general 
 - **Gmail**: Enable IMAP in settings and use an **App Password**.
 - **Outlook Classic**: Just ensure you are signed in. Jasper will use COM to talk to the local app.
 - **New Outlook / Web**: Use the IMAP settings in `.env`.
+- **Teams (Phase 1 Read-Only)**: Add a delegated Microsoft Graph bearer token to `TEAMS_ACCESS_TOKEN`. Jasper searches chats automatically and can also search channel messages for any team IDs listed in `TEAMS_TEAM_IDS`.
 
 ## Advanced: Index Management
 Manage your semantic index via the CLI:
@@ -110,6 +113,7 @@ python -m jasper.utility.indexer build    # Rebuild from scratch
 
 ## Platform Roadmap
 - [x] **Windows (V1.1 Stable)**: Full support for Local Indexing, Outlook COM, and Startup Tasks.
+- [x] **Teams Phase 1 (Read-Only)**: Microsoft Teams message search through Microsoft Graph with dashboard links back to Teams.
 - [ ] **macOS (Planned)**: Apple Mail connector, Spotlight-based local search.
 - [ ] **Linux (Planned)**: IMAP-first mode, Grep-based local fallback.
 
@@ -118,6 +122,7 @@ python -m jasper.utility.indexer build    # Rebuild from scratch
 - **Start Jasper**: Run `startup/run_web.ps1` or `python run.py`.
 - **Background Mode**: Run `python run.py --background` to detach the process and release the terminal. Logs will be written to `jasper.log`.
 - **Open Dashboard**: Go to [http://localhost:8000](http://localhost:8000).
+- **Teams Search Example**: Ask `search teams from anja about budget` or `find teams messages from marko last week`.
 - **Auto-Startup**: Set Jasper to start at login by running this in an Administrator PowerShell window:
   ```powershell
   Set-Location "path\to\Jasper"

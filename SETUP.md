@@ -28,9 +28,11 @@ While Jasper bootstraps automatically, you may want to customize your setup:
 Edit the newly created `.env` file to add:
 - `GEMINI_API_KEY`: Get one at [Google AI Studio](https://aistudio.google.com/).
 - `GMAIL_PASS`: Your Google App Password.
-- `PROVIDER`: Change between `"GMAIL"` and `"OUTLOOK"`.
+- `PROVIDER`: Change between `"GMAIL"`, `"OUTLOOK"`, and `"TEAMS"`.
 - `USER_NAME`: Your Windows profile name for file path resolution.
 - `INDEX_PATHS`: Comma-separated list of directories to index.
+- `TEAMS_ACCESS_TOKEN`: A delegated Microsoft Graph access token for Teams read access.
+- `TEAMS_TEAM_IDS`: Optional comma-separated team IDs if you also want Jasper to search channel messages.
 
 ## 4. Automation & Background Service
 To ensure Jasper stays updated and runs in the background:
